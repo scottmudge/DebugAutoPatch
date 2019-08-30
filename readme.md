@@ -1,8 +1,11 @@
-#Debug Auto Patch
+#DebugAutoPatch
 ###Plugin for IDA Pro 7.0+
 
 About
 =====
+
+Unfortunately the binary patching functionality of IDA Pro's debugger is fairly poor/non-existent compared to other 
+debuggers like x64dbg.  
 
 This plugin applies binary patches to the currently debugged process both automatically at launch time and when they are
 added to the patch database.
