@@ -1,5 +1,6 @@
 import logging
 import idaapi
+import DebugAutoPatch.settings as settings
 
 
 class DebugAutoPatchPlugin(idaapi.plugin_t):
@@ -23,7 +24,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
 
 
 def PLUGIN_ENTRY():
-    # load settings
+    settings.load_settings()
     logging.basicConfig(format='[%(levelname)s] %(message)s\t(%(module)s:%(funcName)s)')
     logging.root.setLevel(logging.DEBUG)
     #idaapi.notify_when(idaapi.NW_OPENIDB, cache.initialize_cache)
