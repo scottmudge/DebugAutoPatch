@@ -1,5 +1,6 @@
 import logging
 import idaapi
+import ida_dbg
 import os
 import idc
 import json
@@ -115,6 +116,16 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
     wanted_name = "DebugAutoPatch"
     wanted_hotkey = ""
 
+    def __init__(self):
+        self.old_ida = False
+        self.opts = None
+
+    class PatchedByte:
+        def __init__(self, addr, orig, patched):
+            self.addr = addr
+            self.orig = orig
+            self.patched = patched
+
     class PatchVisitor(object):
         def __init__(self):
             self.skip = 0
@@ -137,6 +148,9 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
     def init(self):
         global DAP_INITIALIZED
 
+        if idaapi.IDA_SDK_VERSION < 700:
+            self.old_ida = True
+
         # register menu handlers
         try:
             DapMCNull.register(self, "_________________________")
@@ -155,7 +169,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         if not DAP_INITIALIZED:
             DAP_INITIALIZED = True
 
-            if idaapi.IDA_SDK_VERSION >= 700:
+            if not self.old_ida:
                 # Add menu IDA >= 7.0
                 idaapi.attach_action_to_menu("Edit/Patch program/Null Menu", DapMCNull.get_name(), idaapi.SETMENU_APP)
                 idaapi.attach_action_to_menu("Edit/Patch program/Enable Auto-Patching", DapMCEnable.get_name(),
@@ -194,6 +208,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             print("Find more information about DebugAutoPatch at the project github repository")
 
             self.load_configuration()
+            self.set_debug_hooks()
 
             print("=" * 80)
         return idaapi.PLUGIN_KEEP
@@ -205,6 +220,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         pass
 
     def apply_patch_to_memory(self):
+        self.visit_patched_bytes()
         pass
 
     def apply_patches_to_current_proc(self):
@@ -227,6 +243,28 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
 
     def term(self):
         pass
+
+    def test_dbg_start_hook(self, pid, tid, ea, modinfo_name, modinfo_base, modinfo_size):
+        dap_msg("TEST TEST")
+
+    def set_debug_hooks(self):
+        ida_dbg.DBG_Hooks.dbg_process_start = self.test_dbg_start_hook
+
+    def apply_byte_patch(self, patched_byte_ojb):
+        # check if debugger is even running
+        if not idaapi.is_debugger_on():
+            dap_err("Cannot apply patch", "debugger is not currently on")
+            return
+        if not idaapi.is_debugger_busy():
+            dap_err("Cannot apply patch", "debugger is not paused")
+
+        # patch byte in debugger memory
+        if not self.old_ida:
+            idc.patch_dbg_byte(patched_byte_ojb.addr, patched_byte_ojb.patched)
+            idaapi.invalidate_dbgmem_contents(patched_byte_ojb.addr, 1)
+        else:
+            idc.PatchDbgByte(patched_byte_ojb.addr, patched_byte_ojb.patched)
+            idaapi.invalidate_dbgmem_contents(patched_byte_ojb.addr, 1)
 
     def visit_patched_bytes(self):
         visitor = self.PatchVisitor()
