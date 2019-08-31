@@ -71,6 +71,11 @@ try:
             self.plugin.check_update()
             return 1
 
+    class DapMCAbout(Dap_Menu_Context):
+        def activate(self, ctx):
+            self.plugin.about()
+            return 1
+
     class DapMCApplyPatch(Dap_Menu_Context):
         def activate(self, ctx):
             self.plugin.apply_patch_to_memory()
@@ -82,6 +87,11 @@ try:
             return 1
 
     class DapMCNull(Dap_Menu_Context):
+        def activate(self, ctx):
+            self.plugin.menu_null()
+            return 1
+
+    class DapMCNull2(Dap_Menu_Context):
         def activate(self, ctx):
             self.plugin.menu_null()
             return 1
@@ -127,10 +137,16 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
     def init(self):
         global DAP_INITIALIZED
 
-        # register popup menu handlers
+        # register menu handlers
         try:
-            # TODO -- Finish
-            pass
+            DapMCNull.register(self, "_________________________")
+            DapMCNull2.register(self, "_________________________")
+            DapMCEnable.register(self, "Enable Auto-Patching")
+            DapMCDisable.register(self, "Disable Auto-Patching")
+            DapMCApplyPatch.register(self, "Apply Patch to Memory")
+            DapMCApplyPatchesToProc.register(self, "Apply Patches to Current Process")
+            DapMCCheckUpdate.register(self, "Check for DebugAutoPatch Update")
+            DapMCAbout.register(self, "About DebugAutoPatch")
         except:
             pass
 
@@ -139,11 +155,9 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         if not DAP_INITIALIZED:
             DAP_INITIALIZED = True
 
-            #TODO -- Add Menu Items
-
             if idaapi.IDA_SDK_VERSION >= 700:
                 # Add menu IDA >= 7.0
-                idaapi.attach_action_to_menu("Edit/Patch program/-", DapMCNull.get_name(), idaapi.SETMENU_APP)
+                idaapi.attach_action_to_menu("Edit/Patch program/Null Menu", DapMCNull.get_name(), idaapi.SETMENU_APP)
                 idaapi.attach_action_to_menu("Edit/Patch program/Enable Auto-Patching", DapMCEnable.get_name(),
                                              idaapi.SETMENU_APP)
                 idaapi.attach_action_to_menu("Edit/Patch program/Disable Auto-Patching", DapMCDisable.get_name(),
@@ -152,32 +166,37 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
                                              idaapi.SETMENU_APP)
                 idaapi.attach_action_to_menu("Edit/Patch program/Apply Patches to Current Process",
                                              DapMCApplyPatchesToProc.get_name(), idaapi.SETMENU_APP)
-                idaapi.attach_action_to_menu("Edit/Patch program/-", DapMCNull.get_name(), idaapi.SETMENU_APP)
+                idaapi.attach_action_to_menu("Edit/Patch program/Null Menu 2", DapMCNull2.get_name(),
+                                             idaapi.SETMENU_APP)
                 idaapi.attach_action_to_menu("Edit/Patch program/Check for DebugAutoPatch Update",
                                              DapMCCheckUpdate.get_name(), idaapi.SETMENU_APP)
+                idaapi.attach_action_to_menu("Edit/Patch program/About DebugAutoPatch",
+                                             DapMCAbout.get_name(), idaapi.SETMENU_APP)
             else:
                 # Older versions
-                menu = idaapi.add_menu_item("Edit/Patch program/", "-", "", 1, self.menu_null, None)
-                menu = idaapi.add_menu_item("Edit/Patch program/", "Enable Auto-Patching", "", 1,
+               idaapi.add_menu_item("Edit/Patch program/", "-", "", 1, self.menu_null, None)
+               idaapi.add_menu_item("Edit/Patch program/", "Enable Auto-Patching", "", 1,
                                             self.enable_patching, None)
-                menu = idaapi.add_menu_item("Edit/Patch program/", "Disable Auto-Patching", "", 1,
+               idaapi.add_menu_item("Edit/Patch program/", "Disable Auto-Patching", "", 1,
                                             self.disable_patching, None)
-                menu = idaapi.add_menu_item("Edit/Patch program/", "Apply Patch to Memory", "", 1,
+               idaapi.add_menu_item("Edit/Patch program/", "Apply Patch to Memory", "", 1,
                                             self.apply_patch_to_memory, None)
-                menu = idaapi.add_menu_item("Edit/Patch program/", "Apply Patches to Current Process", "", 1,
+               idaapi.add_menu_item("Edit/Patch program/", "Apply Patches to Current Process", "", 1,
                                             self.apply_patches_to_current_proc, None)
-                menu = idaapi.add_menu_item("Edit/Patch program/", "-", "", 1, self.menu_null, None)
-                menu = idaapi.add_menu_item("Edit/Patch program/", "Check for DebugAutoPatch Update", "", 1,
+               idaapi.add_menu_item("Edit/Patch program/", "-", "", 1, self.menu_null, None)
+               idaapi.add_menu_item("Edit/Patch program/", "Check for DebugAutoPatch Update", "", 1,
                                             self.check_update, None)
+               idaapi.add_menu_item("Edit/Patch program/", "About DebugAutoPatch", "", 1, self.about, None)
 
-        print("=" * 80)
-        print("DebugAutoPatch v{0} (c) Scott Mudge, 2019".format(VERSION))
-        print("Keypatch Search is available from menu Edit | Patch program | ...")
-        print("Find more information about DebugAutoPatch at the project github repository")
+            print("=" * 80)
+            print("DebugAutoPatch v{0} (c) Scott Mudge, 2019".format(VERSION))
+            print("DebugAutoPatch is available from menu Edit | Patch program | ...")
+            print("Find more information about DebugAutoPatch at the project github repository")
 
-        self.load_configuration()
+            self.load_configuration()
 
-        print("=" * 80)
+            print("=" * 80)
+        return idaapi.PLUGIN_KEEP
 
     def enable_patching(self):
         pass
@@ -189,6 +208,9 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         pass
 
     def apply_patches_to_current_proc(self):
+        pass
+
+    def about(self):
         pass
 
     def check_update(self):
