@@ -119,6 +119,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
     def __init__(self):
         self.old_ida = False
         self.opts = None
+        self.debug_hook = None
 
     class PatchedByte:
         def __init__(self, addr, orig, patched):
@@ -144,6 +145,82 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             dap_msg("Done!")
 
             return 0
+
+    class DebugHook(idaapi.DBG_Hooks):
+        def __init__(self, *args):
+            super(DebugAutoPatchPlugin.DebugHook, self).__init__(*args)
+            self.steps = 0
+
+        def dbg_process_start(self, pid, tid, ea, name, base, size):
+            dap_msg("Process started, pid=%d tid=%d name=%s" % (pid, tid, name))
+
+        def dbg_process_exit(self, pid, tid, ea, code):
+            dap_msg("Process exited pid=%d tid=%d ea=0x%x code=%d" % (pid, tid, ea, code))
+
+        def dbg_library_unload(self, pid, tid, ea, info):
+            dap_msg("Library unloaded: pid=%d tid=%d ea=0x%x info=%s" % (pid, tid, ea, info))
+            return 0
+
+        def dbg_process_attach(self, pid, tid, ea, name, base, size):
+            dap_msg("Process attach pid=%d tid=%d ea=0x%x name=%s base=%x size=%x" % (pid, tid, ea, name, base, size))
+
+        def dbg_process_detach(self, pid, tid, ea):
+            dap_msg("Process detached, pid=%d tid=%d ea=0x%x" % (pid, tid, ea))
+            return 0
+
+        def dbg_library_load(self, pid, tid, ea, name, base, size):
+            dap_msg("Library loaded: pid=%d tid=%d name=%s base=%x" % (pid, tid, name, base))
+
+        def dbg_bpt(self, tid, ea):
+            dap_msg("Break point at 0x%x pid=%d" % (ea, tid))
+            # return values:
+            #   -1 - to display a breakpoint warning dialog
+            #        if the process is suspended.
+            #    0 - to never display a breakpoint warning dialog.
+            #    1 - to always display a breakpoint warning dialog.
+            return 0
+
+        def dbg_suspend_process(self):
+            dap_msg("Process suspended")
+
+        def dbg_exception(self, pid, tid, ea, exc_code, exc_can_cont, exc_ea, exc_info):
+            dap_msg("Exception: pid=%d tid=%d ea=0x%x exc_code=0x%x can_continue=%d exc_ea=0x%x exc_info=%s" % (
+                pid, tid, ea, exc_code & idaapi.BADADDR, exc_can_cont, exc_ea, exc_info))
+            # return values:
+            #   -1 - to display an exception warning dialog
+            #        if the process is suspended.
+            #   0  - to never display an exception warning dialog.
+            #   1  - to always display an exception warning dialog.
+            return 0
+
+        def dbg_trace(self, tid, ea):
+            dap_msg("Trace tid=%d ea=0x%x" % (tid, ea))
+            # return values:
+            #   1  - do not log this trace event;
+            #   0  - log it
+            return 0
+
+        def dbg_step_into(self):
+            self.steps += 1
+            dap_msg("Step into - steps = {}".format(self.steps))
+            idaapi.step_into()
+
+        def dbg_run_to(self, pid, tid=0, ea=0):
+            dap_msg("Runto: tid=%d" % tid)
+            idaapi.continue_process()
+
+        def dbg_step_over(self):
+            self.steps += 1
+            dap_msg("Step over - steps = {}".format(self.steps))
+            idaapi.step_over()
+            # eip = idc.GetRegValue("EIP")
+            # dap_msg("0x%x %s" % (eip, idc.GetDisasm(eip)))
+            #
+            # self.steps += 1
+            # if self.steps >= 5:
+            #     idaapi.request_exit_process()
+            # else:
+            #     idaapi.request_step_over()
 
     def init(self):
         global DAP_INITIALIZED
@@ -244,11 +321,20 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
     def term(self):
         pass
 
-    def test_dbg_start_hook(self, pid, tid, ea, modinfo_name, modinfo_base, modinfo_size):
-        dap_msg("TEST TEST")
-
     def set_debug_hooks(self):
-        ida_dbg.DBG_Hooks.dbg_process_start = self.test_dbg_start_hook
+        dap_msg("Installing debug hooks...")
+        # Remove previous hook
+        try:
+            if self.debug_hook:
+                dap_msg("Removing previous debug hook")
+                self.debug_hook.unhook()
+        except:
+            pass
+
+        self.debug_hook = DebugAutoPatchPlugin.DebugHook()
+        self.debug_hook.hook()
+        self.debug_hook.steps = 0
+        dap_msg("Done!")
 
     def apply_byte_patch(self, patched_byte_ojb):
         # check if debugger is even running
@@ -270,7 +356,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         visitor = self.PatchVisitor()
         result = idaapi.visit_patched_bytes(0, idaapi.BADADDR, visitor)
         if result != 0:
-            dap_err("visit_patched_bytes() returned unexpected result (code {})".format(result))
+            dap_err("visit_patched_bytes() returned unexpected result", "error code ({})".format(result))
         else:
             dap_msg("Total Patched Bytes: {}  ...  Total Skipped Bytes: {}".format(visitor.patch, visitor.skip))
 
