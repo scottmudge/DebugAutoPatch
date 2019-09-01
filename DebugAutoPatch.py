@@ -1,3 +1,41 @@
+# DebugAutoPatch IDA Plugin - UNDER DEVELOPMENT
+# Additional support powered by Keystone Engine (http://www.keystone-engine.org).
+# By Scott Mudge, 2019 -- https://scottmudge.com.
+#
+# NOTE: This has been tested with IDA 7.0 - I have made attempts at backward/forward compatibility,
+# but please report bugs for other versions.
+#
+# DebugAutoPatch is released under the GNU GPLv3 license. See LICENSE for more information.
+# Find information and latest version at https://github.com/scottmudge/DebugAutoPatch
+
+# This IDA plugin automatically applies byte patches stored in the IDA "Patched bytes" database
+# to the debugged process at runtime. It does this at (by default) the entry-point of the application (or DLL),
+# or at a defined breakpoint. The process will then automatically resume with the patched bytes set in memory.
+# Patches can also be classified into groups, which can be applied at the group's pre-defined breakpoints (useful
+# for packed binaries). Furthermore, patches can be applied arbitrarily at any point during the debug session.
+#
+# Why? Making modifications to application/rdata code can be tedious, IDA in particular. First the patch must be
+# made with the clunky patching tools, and then the binary must be patched on-disk, followed by re-executing the
+# application. Compared to features in x64dbg, this is just ridiculously tedious.
+#
+# Settings and tools can be found in the standard "Edit > Patched bytes" menu. Context/right-click menus can also
+# be enabled in the settings dialog.
+#
+# NOTICE:
+#   If you wish to use the new patching tool, it will require use of the Keystone engine. Please install
+#   using the instructions found here: (http://www.keystone-engine.org).
+#
+# Developer Notes:
+# --------------------
+# Change Log:
+#   * Just see the commit logs.
+#
+# TODO:
+#   * Add automatic breakpoint at entrypoint of application.
+#   * Add method to stop at entry breakpoint, apply patches, and resume automatically.
+#   * Add options to set custom patch-application breakpoint, and also option to disable automatic process resumption.
+#
+
 import logging
 import idaapi
 import ida_dbg
@@ -108,6 +146,7 @@ def dap_err(string, error):
     print("{}: [ERROR] {}\n\t> Details: {}".format(DBGAP_NAME, string, error))
 
 
+# noinspection PyBroadException
 class DebugAutoPatchPlugin(idaapi.plugin_t):
     # This keeps the plugin in memory, important for hooking callbacks
     flags = idaapi.PLUGIN_KEEP
@@ -322,19 +361,22 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         pass
 
     def set_debug_hooks(self):
+        self.unset_debug_hooks()
         dap_msg("Installing debug hooks...")
-        # Remove previous hook
-        try:
-            if self.debug_hook:
-                dap_msg("Removing previous debug hook")
-                self.debug_hook.unhook()
-        except:
-            pass
-
         self.debug_hook = DebugAutoPatchPlugin.DebugHook()
         self.debug_hook.hook()
         self.debug_hook.steps = 0
         dap_msg("Done!")
+
+    def unset_debug_hooks(self):
+        """Remove any installed debug hooks."""
+        try:
+            if self.debug_hook:
+                dap_msg("Removing previously installed debugger hooks...")
+                self.debug_hook.unhook()
+                dap_msg("Done!")
+        except:
+            pass
 
     def apply_byte_patch(self, patched_byte_ojb):
         # check if debugger is even running
@@ -362,7 +404,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
 
     def load_configuration(self):
         self.opts = {}
-
+        save_cfg = False
         # load configuration from file
         try:
             f = open(DBGAP_CONFIG_FILE_PATH, "rt")
@@ -370,6 +412,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             f.close()
         except IOError:
             dap_msg("Failed to load config file -- using defaults.")
+            save_cfg = True
         except Exception as e:
             dap_err("Failed to load config file.", str(e))
 
@@ -379,6 +422,22 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         # Enables applying patches immediately, when they are set.
         if 'patch_immediately' not in self.opts:
             self.opts['patch_immediately'] = True
+
+        if save_cfg:
+            self.save_configuration()
+
+    def save_configuration(self):
+        if self.opts:
+            try:
+                json.dump(self.opts, open(DBGAP_CONFIG_FILE_PATH, "wt"))
+            except Exception as e:
+                dap_err("Failed to save configuration file", str(e))
+            else:
+                dap_msg("Saved configuration to: {}".format(DBGAP_CONFIG_FILE_PATH))
+
+    def term(self):
+        self.unset_debug_hooks()
+        self.save_configuration()
 
 
 def PLUGIN_ENTRY():
