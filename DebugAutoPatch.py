@@ -277,11 +277,10 @@ except:
     pass
 
 
-# noinspection PyBroadException
 class DebugAutoPatchPlugin(idaapi.plugin_t):
     # This keeps the plugin in memory, important for hooking callbacks
     flags = idaapi.PLUGIN_KEEP
-    comment = "Plugin for automatic patched injection - no file patching needed!"
+    comment = "Plugin for automatic byte patch injection - no binary-file patching needed!"
     help = "See https://github.com/scottmudge/IDA_DebugAutoPatch/blob/master/readme.md"
     wanted_name = "DebugAutoPatch"
     wanted_hotkey = ""
@@ -329,7 +328,6 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         def __init__(self, *args):
             super(DebugAutoPatchPlugin.DebugHook, self).__init__(*args)
             self.steps = 0
-            dap_msg("DebugHook INIT")
 
         def dbg_process_start(self, pid, tid, ea, name, base, size):
             dap_msg("Process start hook snagged -- applying patches...")
@@ -337,74 +335,74 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             if result >= 0:
                 dap_msg("Success!")
 
-        def dbg_process_exit(self, pid, tid, ea, code):
-            dap_msg("Process exited pid=%d tid=%d ea=0x%x code=%d" % (pid, tid, ea, code))
-
-        def dbg_library_unload(self, pid, tid, ea, info):
-            # dap_msg("Library unloaded: pid=%d tid=%d ea=0x%x info=%s" % (pid, tid, ea, info))
-            return 0
-
-        def dbg_process_attach(self, pid, tid, ea, name, base, size):
-            dap_msg("Process attach pid=%d tid=%d ea=0x%x name=%s base=%x size=%x" % (pid, tid, ea, name, base, size))
-
-        def dbg_process_detach(self, pid, tid, ea):
-            # dap_msg("Process detached, pid=%d tid=%d ea=0x%x" % (pid, tid, ea))
-            return 0
-
-        def dbg_library_load(self, pid, tid, ea, name, base, size):
-            # dap_msg("Library loaded: pid=%d tid=%d name=%s base=%x" % (pid, tid, name, base))
-            pass
-
-        def dbg_bpt(self, tid, ea):
-            # dap_msg("Break point at 0x%x pid=%d" % (ea, tid))
-            # return values:
-            #   -1 - to display a breakpoint warning dialog
-            #        if the process is suspended.
-            #    0 - to never display a breakpoint warning dialog.
-            #    1 - to always display a breakpoint warning dialog.
-            return 0
-
-        def dbg_suspend_process(self):
-            dap_msg("Process suspended")
-
-        def dbg_exception(self, pid, tid, ea, exc_code, exc_can_cont, exc_ea, exc_info):
-            # dap_msg("Exception: pid=%d tid=%d ea=0x%x exc_code=0x%x can_continue=%d exc_ea=0x%x exc_info=%s" % (
-            #   pid, tid, ea, exc_code & idaapi.BADADDR, exc_can_cont, exc_ea, exc_info))
-            # return values:
-            #   -1 - to display an exception warning dialog
-            #        if the process is suspended.
-            #   0  - to never display an exception warning dialog.
-            #   1  - to always display an exception warning dialog.
-            return 0
-
-        def dbg_trace(self, tid, ea):
-            # dap_msg("Trace tid=%d ea=0x%x" % (tid, ea))
-            # return values:
-            #   1  - do not log this trace event;
-            #   0  - log it
-            return 0
-
-        def dbg_step_into(self):
-            self.steps += 1
-            # dap_msg("Step into - steps = {}".format(self.steps))
-            idaapi.step_into()
-
-        def dbg_run_to(self, pid, tid=0, ea=0):
-            # dap_msg("Runto: tid=%d" % tid)
-            idaapi.continue_process()
-
-        def dbg_step_over(self):
-            self.steps += 1
-            # dap_msg("Step over - steps = {}".format(self.steps))
-            idaapi.step_over()
-            # eip = idc.GetRegValue("EIP")
-            # dap_msg("0x%x %s" % (eip, idc.GetDisasm(eip)))
-            #
-            # self.steps += 1
-            # if self.steps >= 5:
-            #     idaapi.request_exit_process()
-            # else:
-            #     idaapi.request_step_over()
+        # def dbg_process_exit(self, pid, tid, ea, code):
+        #     dap_msg("Process exited pid=%d tid=%d ea=0x%x code=%d" % (pid, tid, ea, code))
+        #
+        # def dbg_library_unload(self, pid, tid, ea, info):
+        #     # dap_msg("Library unloaded: pid=%d tid=%d ea=0x%x info=%s" % (pid, tid, ea, info))
+        #     return 0
+        #
+        # def dbg_process_attach(self, pid, tid, ea, name, base, size):
+        #     dap_msg("Process attach pid=%d tid=%d ea=0x%x name=%s base=%x size=%x" % (pid, tid, ea, name, base, size))
+        #
+        # def dbg_process_detach(self, pid, tid, ea):
+        #     # dap_msg("Process detached, pid=%d tid=%d ea=0x%x" % (pid, tid, ea))
+        #     return 0
+        #
+        # def dbg_library_load(self, pid, tid, ea, name, base, size):
+        #     # dap_msg("Library loaded: pid=%d tid=%d name=%s base=%x" % (pid, tid, name, base))
+        #     pass
+        #
+        # def dbg_bpt(self, tid, ea):
+        #     # dap_msg("Break point at 0x%x pid=%d" % (ea, tid))
+        #     # return values:
+        #     #   -1 - to display a breakpoint warning dialog
+        #     #        if the process is suspended.
+        #     #    0 - to never display a breakpoint warning dialog.
+        #     #    1 - to always display a breakpoint warning dialog.
+        #     return 0
+        #
+        # def dbg_suspend_process(self):
+        #     dap_msg("Process suspended")
+        #
+        # def dbg_exception(self, pid, tid, ea, exc_code, exc_can_cont, exc_ea, exc_info):
+        #     # dap_msg("Exception: pid=%d tid=%d ea=0x%x exc_code=0x%x can_continue=%d exc_ea=0x%x exc_info=%s" % (
+        #     #   pid, tid, ea, exc_code & idaapi.BADADDR, exc_can_cont, exc_ea, exc_info))
+        #     # return values:
+        #     #   -1 - to display an exception warning dialog
+        #     #        if the process is suspended.
+        #     #   0  - to never display an exception warning dialog.
+        #     #   1  - to always display an exception warning dialog.
+        #     return 0
+        #
+        # def dbg_trace(self, tid, ea):
+        #     # dap_msg("Trace tid=%d ea=0x%x" % (tid, ea))
+        #     # return values:
+        #     #   1  - do not log this trace event;
+        #     #   0  - log it
+        #     return 0
+        #
+        # def dbg_step_into(self):
+        #     self.steps += 1
+        #     # dap_msg("Step into - steps = {}".format(self.steps))
+        #     idaapi.step_into()
+        #
+        # def dbg_run_to(self, pid, tid=0, ea=0):
+        #     # dap_msg("Runto: tid=%d" % tid)
+        #     idaapi.continue_process()
+        #
+        # def dbg_step_over(self):
+        #     self.steps += 1
+        #     # dap_msg("Step over - steps = {}".format(self.steps))
+        #     idaapi.step_over()
+        #     # eip = idc.GetRegValue("EIP")
+        #     # dap_msg("0x%x %s" % (eip, idc.GetDisasm(eip)))
+        #     #
+        #     # self.steps += 1
+        #     # if self.steps >= 5:
+        #     #     idaapi.request_exit_process()
+        #     # else:
+        #     #     idaapi.request_step_over()
 
     def init(self):
         """Initialization routine."""
@@ -466,7 +464,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
 
             print("=" * 80)
             print("DebugAutoPatch v{0} Copyright (c) Scott Mudge 2019".format(DAP_VERSION))
-            print("DebugAutoPatch is available from menu Edit | Patch program | ...")
+            print("DebugAutoPatch is available from menu \"Edit > Patch program\"")
             print("Find more information about DebugAutoPatch at the project github repository")
 
             self.load_configuration()
@@ -604,10 +602,8 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         """Applies a byte patch to current debugger memory."""
         # check if debugger is even running
         if not idaapi.is_debugger_on():
-            dap_warn("Cannot apply patched - debugger is not currently on!")
-            return
-        if not idaapi.is_debugger_busy():
-            dap_warn("Cannot apply patched - debugger is not paused!")
+            dap_warn("Cannot apply patch - debugger is not currently on!")
+            return 0
 
         try:
             # patched byte in debugger memory
@@ -677,6 +673,5 @@ def PLUGIN_ENTRY():
     global DAP_INSTANCE
     logging.basicConfig(format='[%(levelname)s] %(message)s\t(%(module)s:%(funcName)s)')
     logging.root.setLevel(logging.DEBUG)
-    # idaapi.notify_when(idaapi.NW_OPENIDB, cache.initialize_cache)
     DAP_INSTANCE = DebugAutoPatchPlugin()
     return DAP_INSTANCE
