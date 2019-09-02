@@ -487,10 +487,11 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             # patched byte in debugger memory
             if not self.old_ida:
                 result = idc.patch_dbg_byte(patched_byte_ojb.addr, patched_byte_ojb.patched)
-                idaapi.invalidate_dbgmem_contents(patched_byte_ojb.addr, 1)
             else:
                 result = idc.PatchDbgByte(patched_byte_ojb.addr, patched_byte_ojb.patched)
-                idaapi.invalidate_dbgmem_contents(patched_byte_ojb.addr, 1)
+            if result > 0:
+                idaapi.invalidate_dbgmem_contents(patched_byte_ojb.addr, 1) # addr, size
+                # TODO - Check if idaapi.refresh_debugger_memory() is needed?
             return result
         except Exception as e:
             dap_err("Error encountered while applying byte patch to memory!", str(e))
