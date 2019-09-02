@@ -51,8 +51,15 @@ import idc
 import json
 
 
+# TEMPORARY!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# ENABLE_DEBUGGING = False
+# if ENABLE_DEBUGGING:
+#     import pydevd
+#     pydevd_pycharm.settrace('localhost', port=12345, stdoutToServer=True, stderrToServer=True)
+# /TEMPORARY!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 #  ----------------------------------------- Globals -----------------------------------------
-DAP_VERSION = "0.1"
+DAP_VERSION = "0.2"
 DAP_NAME = "DebugAutoPatch"
 DAP_CONFIG_FILE_PATH = os.path.join(idc.GetIdaDirectory(), 'cfg', 'DebugAutoPatch.cfg')
 DAP_WEBSITE = "https://github.com/scottmudge/DebugAutoPatch"
@@ -86,6 +93,9 @@ class KillableThread(Thread):
     target function.
     """
 
+    def __del__(self):
+        self.kill()
+
     def __init__(self, name, target, sleep_interval):
         """
         Args:
@@ -108,17 +118,22 @@ class KillableThread(Thread):
     def run(self):
         """Runs the thread."""
         dap_msg("Starting thread... [name={}]".format(self._name))
+
         while True:
-            self._target()
-            # If no kill signal is set, sleep for the interval,
-            # If kill signal comes in while sleeping, immediately
-            #  wake up and handle
-            is_triggerer = self._trigger.wait(timeout=self._interval)
-            if is_triggerer:
-                if self._kill:
-                    break
-                else:
-                    self._trigger.clear()
+            try:
+                self._target()
+                # If no kill signal is set, sleep for the interval,
+                # If kill signal comes in while sleeping, immediately
+                #  wake up and handle
+                is_triggerer = self._trigger.wait(timeout=self._interval)
+                if is_triggerer:
+                    if self._kill:
+                        break
+                    else:
+                        self._trigger.clear()
+            except(KeyboardInterrupt, SystemExit):
+                self.kill()
+                continue
         dap_msg("Thread killed! [name={}]".format(self._name))
 
     def kill(self):
@@ -277,6 +292,9 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
     wanted_name = "DebugAutoPatch"
     wanted_hotkey = ""
 
+    def __del__(self):
+        self.term()
+
     def __init__(self):
         self.old_ida = False
         self.cfg = None
@@ -298,14 +316,17 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             self.patched_bytes = []
 
         def __call__(self, ea, fpos, orig, patch_val, cnt=()):
-            if fpos == -1:
-                self.skipped += 1
-                dap_msg("fpos invalid ({}) -- patch skipped".format(fpos))
-            else:
-                self.patched += 1
-                dap_msg(" ea: %x \\ fpos: %x \\ o: %x \\ v: %x" % (ea, fpos, orig, patch_val))
-                self.patched_bytes.append(DebugAutoPatchPlugin.PatchedByte(ea, orig, patch_val))
-            return 0
+            try:
+                if fpos == -1:
+                    self.skipped += 1
+                    dap_msg("fpos invalid ({}) -- patch skipped".format(fpos))
+                else:
+                    self.patched += 1
+                    # dap_msg(" ea: %x \\ fpos: %x \\ o: %x \\ v: %x" % (ea, fpos, orig, patch_val))
+                    self.patched_bytes.append(DebugAutoPatchPlugin.PatchedByte(ea, orig, patch_val))
+                return 0
+            except:
+                return
 
     class DebugHook(idaapi.DBG_Hooks):
         def __init__(self, *args):
@@ -464,17 +485,20 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         """Monitors patches and caches patch DB, since IDA has separate DBs for debugged processes and non-debugged
         processes."""
         # Don't collect patches if debugger is on
-        if idaapi.is_debugger_on() or idaapi.is_debugger_busy():
-            return
+        try:
+            if idaapi.is_debugger_on() or idaapi.is_debugger_busy():
+                return
 
-        if not self.patched_bytes_db_lock.acquire(False):
-            return
-        else:
-            try:
-                patches = self.visit_patched_bytes()
-                self.patched_bytes_db = patches
-            finally:
-                self.patched_bytes_db_lock.release()
+            if not self.patched_bytes_db_lock.acquire(False):
+                return
+            else:
+                try:
+                    patches = self.visit_patched_bytes()
+                    self.patched_bytes_db = patches
+                finally:
+                    self.patched_bytes_db_lock.release()
+        except:
+            pass
 
     def enable_patching(self):
         self.cfg[DapCfg.Enabled] = True
@@ -531,7 +555,8 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
     def menu_null(self):
         pass
 
-    def run(self):
+    def run(self, *args):
+        self.about()
         pass
 
     def term(self):
@@ -574,7 +599,6 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
                 result = idc.PatchDbgByte(patched_byte_ojb.addr, patched_byte_ojb.patched)
             if result > 0:
                 idaapi.invalidate_dbgmem_contents(patched_byte_ojb.addr, 1) # addr, size
-                # TODO - Check if idaapi.refresh_debugger_memory() is needed?
             return result
         except Exception as e:
             dap_err("Error encountered while applying byte patch to memory!", str(e))
@@ -590,8 +614,6 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             if result != 0:
                 dap_err("visit_patched_bytes() returned unexpected result", "error code ({})".format(result))
                 return []
-            else:
-                dap_msg("Total Patched Bytes: {}  ...  Total Skipped Bytes: {}".format(visitor.patched, visitor.skipped))
             return visitor.patched_bytes
         except Exception as e:
             dap_err("Exception encountered while visiting patched bytes", str(e))
