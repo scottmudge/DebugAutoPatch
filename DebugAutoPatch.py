@@ -7,21 +7,25 @@
 #
 # DebugAutoPatch is released under the GNU GPLv3 license. See LICENSE for more information.
 # Find information and latest version at https://github.com/scottmudge/DebugAutoPatch
-
-# This IDA plugin automatically applies byte patches stored in the IDA "Patched bytes" database
+#
+# TBI = To-be-implemented
+#
+# This IDA plugin automatically applies byte patches stored in the NON-debug IDA "Patched bytes" database
 # to the debugged process at runtime. It does this at (by default) the entry-point of the application (or DLL),
-# or at a defined breakpoint. The process will then automatically resume with the patched bytes set in memory.
-# Patches can also be classified into groups, which can be applied at the group's pre-defined breakpoints (useful
+# or at a defined breakpoint (TBI). The process will then automatically resume with the patched bytes set in memory.
+# (TBI) Patches can also be classified into groups, which can be applied at the group's pre-defined breakpoints (useful
 # for packed binaries). Furthermore, patches can be applied arbitrarily at any point during the debug session.
 #
-# Why? Making modifications to application/rdata code can be tedious, IDA in particular. First the patched must be
+# Why? Making modifications to application/rdata code can be tedious, IDA in particular. First the patches must be
 # made with the clunky patching tools, and then the binary must be patched on-disk, followed by re-executing the
-# application. Compared to features in x64dbg, this is just ridiculously tedious.
+# application. Compared to features in x64dbg, this is just ridiculously tedious. Furthermore, patching the actual
+# binary introduces a number of potential issues which could be mitigated by leaving it untouched. For instance, if
+# the module or application performs hash checks to ensure it has not been modified.
 #
 # Settings and tools can be found in the standard "Edit > Patched bytes" menu. Context/right-click menus can also
 # be enabled in the settings dialog.
 #
-# NOTICE:
+# (TBI) NOTICE:
 #   If you wish to use the new patching tool, it will require use of the Keystone engine. Please install
 #   using the instructions found here: (http://www.keystone-engine.org).
 #
@@ -31,15 +35,7 @@
 #   * Just see the commit logs.
 #
 # TODO:
-#   * Add automatic breakpoint at entrypoint of application.
-#   * Add method to stop at entry breakpoint, apply patches, and resume automatically.
 #   * Add options to set custom patched-application breakpoint, and also option to disable automatic process resumption.
-#
-#   Behavior Outline:
-#
-#   1. Hook debug functions.
-#   2. Set breakpoint at entrypoint.
-#   3. When entrypoint is hit, refresh and apply patches to debugger memory.
 #
 #
 
@@ -71,28 +67,27 @@ DAP_INSTANCE = None
 
 #  ----------------------------------------- Utilities -----------------------------------------
 def dap_msg(string):
-    print("{}: {}".format(DAP_NAME, string))
+    print("[{}]: {}".format(DAP_NAME, string))
 
 
 def dap_warn(string, details = None):
     if details:
-        print("{}: [WARNING] {}\n\t> Details: {}".format(DAP_NAME, string, details))
+        print("[{} | WARNING]: {}\n\t> Details: {}".format(DAP_NAME, string, details))
     else:
-        print("{}: [WARNING] {}".format(DAP_NAME, string))
+        print("[{} | WARNING]: {}".format(DAP_NAME, string))
 
 
 def dap_err(string, details = None):
     if details:
-        print("{}: [ERROR] {}\n\t> Details: {}".format(DAP_NAME, string, details))
+        print("[{} | ERROR]: {}\n\t> Details: {}".format(DAP_NAME, string, details))
     else:
-        print("{}: [ERROR] {}".format(DAP_NAME, string))
+        print("[{} | ERROR]: {}".format(DAP_NAME, string))
 
 
 class KillableThread(Thread):
     """Wraps a killable thread that loops at a preset interval. Runs supplied
     target function.
     """
-
     def __del__(self):
         self.kill()
 
@@ -109,6 +104,7 @@ class KillableThread(Thread):
         self._target = target
         self._name = name
         self._kill = False
+        self.setDaemon(True)
 
     def trigger(self):
         """Triggers loop, but does not kill it."""
@@ -117,8 +113,6 @@ class KillableThread(Thread):
 
     def run(self):
         """Runs the thread."""
-        dap_msg("Starting thread... [name={}]".format(self._name))
-
         while True:
             try:
                 self._target()
@@ -304,12 +298,15 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         self.monitor_thread = None
 
     class PatchedByte:
+        """Container for patched byte type."""
         def __init__(self, addr, orig, patched):
             self.addr = addr
             self.orig = orig
             self.patched = patched
 
     class PatchVisitor(object):
+        """Used for visiting patched bytes when debugger is not active. These patches are then stored in a buffer,
+        and are applied when debugger activates."""
         def __init__(self):
             self.skipped = 0
             self.patched = 0
@@ -410,6 +407,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             #     idaapi.request_step_over()
 
     def init(self):
+        """Initialization routine."""
         global DAP_INITIALIZED
 
         if idaapi.IDA_SDK_VERSION < 700:
@@ -474,6 +472,10 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             self.load_configuration()
             self.set_debug_hooks()
 
+            # Update patch database first
+            self.patch_monitor_func()
+
+            dap_msg("Starting patch monitoring thread...")
             self.monitor_thread = KillableThread(name="PatchMonitoring", target=self.patch_monitor_func,
                                                  sleep_interval=1.0)
             self.monitor_thread.start()
@@ -493,25 +495,33 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
                 return
             else:
                 try:
+                    was_empty = False
+                    if len(self.patched_bytes_db) < 1:
+                        was_empty = True
                     patches = self.visit_patched_bytes()
                     self.patched_bytes_db = patches
+                    if len(patches) > 0 and was_empty:
+                        dap_msg("Byte patch buffer populated!")
                 finally:
                     self.patched_bytes_db_lock.release()
         except:
             pass
 
     def enable_patching(self):
+        """Enables automatic patching."""
         self.cfg[DapCfg.Enabled] = True
         dap_msg("Automatic patching enabled.")
         pass
 
     def disable_patching(self):
+        """Disables automatic patching."""
         self.cfg[DapCfg.Enabled] = False
         dap_msg("Automatic patching disabled.")
         pass
 
     def apply_patch_to_memory(self):
-        # self.visit_patched_bytes()
+        """Adds a new patch to database."""
+        # TODO -- Implement
         pass
 
     def apply_patches_to_current_proc(self):
@@ -544,28 +554,35 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
 
     @staticmethod
     def about():
+        """About window."""
         f = DAPAboutForm()
         f.Execute()
         f.Free()
         pass
 
     def check_update(self):
+        """Checks for new version."""
+        # TODO - Update
         pass
 
     def menu_null(self):
+        """For menu item which does nothing."""
         pass
 
     def run(self, *args):
+        """Used for when user selects plugin entry from Edit > Plugins"""
         self.about()
         pass
 
     def term(self):
+        """Termination call."""
         if self.monitor_thread:
             self.monitor_thread.kill()
         self.unset_debug_hooks()
         self.save_configuration()
 
     def set_debug_hooks(self):
+        """Installs debugger hooks for automatic patching."""
         self.unset_debug_hooks()
         dap_msg("Installing debug hooks...")
         self.debug_hook = DebugAutoPatchPlugin.DebugHook()
@@ -584,6 +601,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             pass
 
     def apply_byte_patch(self, patched_byte_ojb):
+        """Applies a byte patch to current debugger memory."""
         # check if debugger is even running
         if not idaapi.is_debugger_on():
             dap_warn("Cannot apply patched - debugger is not currently on!")
@@ -621,6 +639,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             dap_err("Unknown")
 
     def load_configuration(self):
+        """Loads configuration from disk."""
         self.cfg = {}
         save_cfg = False
         # load configuration from file
@@ -644,6 +663,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             self.save_configuration()
 
     def save_configuration(self):
+        """Saves configuration to disk."""
         if self.cfg:
             try:
                 json.dump(self.cfg, open(DAP_CONFIG_FILE_PATH, "wt"))
