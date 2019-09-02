@@ -477,7 +477,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
 
             dap_msg("Starting patch monitoring thread...")
             self.monitor_thread = KillableThread(name="PatchMonitoring", target=self.patch_monitor_func,
-                                                 sleep_interval=1.0)
+                                                 sleep_interval=0.7)
             self.monitor_thread.start()
 
             print("=" * 80)
