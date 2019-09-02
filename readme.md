@@ -37,7 +37,9 @@ Features
     
 Example Video
 =====
- TODO -- Add one here
+Click to enlarge...
+
+[![Video example of DebugAutoPatch](https://i.imgur.com/LeC61Nl.gif)](https://giant.gfycat.com/TornMiserableCatbird.webm)
 
 Notes
 =====
