@@ -43,21 +43,26 @@
 #
 #
 
+from threading import Thread, Lock, Event
 import logging
 import idaapi
 import os
 import idc
 import json
 
+
+#  ----------------------------------------- Globals -----------------------------------------
 DAP_VERSION = "0.1"
 DAP_NAME = "DebugAutoPatch"
 DAP_CONFIG_FILE_PATH = os.path.join(idc.GetIdaDirectory(), 'cfg', 'DebugAutoPatch.cfg')
 DAP_WEBSITE = "https://github.com/scottmudge/DebugAutoPatch"
 DEBUG_MESSAGE_LEVEL = logging.INFO
 DAP_INITIALIZED = False
-
 DAP_INSTANCE = None
+#  ---------------------------------------------------------------------------------------------
 
+
+#  ----------------------------------------- Utilities -----------------------------------------
 def dap_msg(string):
     print("{}: {}".format(DAP_NAME, string))
 
@@ -68,11 +73,60 @@ def dap_warn(string, details = None):
     else:
         print("{}: [WARNING] {}".format(DAP_NAME, string))
 
+
 def dap_err(string, details = None):
     if details:
         print("{}: [ERROR] {}\n\t> Details: {}".format(DAP_NAME, string, details))
     else:
         print("{}: [ERROR] {}".format(DAP_NAME, string))
+
+
+class KillableThread(Thread):
+    """Wraps a killable thread that loops at a preset interval. Runs supplied
+    target function.
+    """
+
+    def __init__(self, name, target, sleep_interval):
+        """
+        Args:
+            name: Name of the thread, used for logging.
+            target (function): Target function
+            sleep_interval (float): Sleep interval seconds between loops.
+        """
+        super(KillableThread, self).__init__(group=None, target=target, name=name)
+        self._trigger = Event()
+        self._interval = sleep_interval
+        self._target = target
+        self._name = name
+        self._kill = False
+
+    def trigger(self):
+        """Triggers loop, but does not kill it."""
+        self._kill = False
+        self._trigger.set()
+
+    def run(self):
+        """Runs the thread."""
+        dap_msg("Starting thread... [name={}]".format(self._name))
+        while True:
+            self._target()
+            # If no kill signal is set, sleep for the interval,
+            # If kill signal comes in while sleeping, immediately
+            #  wake up and handle
+            is_triggerer = self._trigger.wait(timeout=self._interval)
+            if is_triggerer:
+                if self._kill:
+                    break
+                else:
+                    self._trigger.clear()
+        dap_msg("Thread killed! [name={}]".format(self._name))
+
+    def kill(self):
+        """Kills the thread."""
+        dap_msg("Killing thread... [name={}]".format(self._name))
+        self._kill = True
+        self._trigger.set()
+#  ---------------------------------------------------------------------------------------------
 
 
 class DapCfg:
@@ -227,6 +281,9 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         self.old_ida = False
         self.cfg = None
         self.debug_hook = None
+        self.patched_bytes_db = []
+        self.patched_bytes_db_lock = Lock()
+        self.monitor_thread = None
 
     class PatchedByte:
         def __init__(self, addr, orig, patched):
@@ -254,6 +311,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         def __init__(self, *args):
             super(DebugAutoPatchPlugin.DebugHook, self).__init__(*args)
             self.steps = 0
+            dap_msg("DebugHook INIT")
 
         def dbg_process_start(self, pid, tid, ea, name, base, size):
             dap_msg("Process start hook snagged -- applying patches...")
@@ -265,21 +323,22 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             dap_msg("Process exited pid=%d tid=%d ea=0x%x code=%d" % (pid, tid, ea, code))
 
         def dbg_library_unload(self, pid, tid, ea, info):
-            dap_msg("Library unloaded: pid=%d tid=%d ea=0x%x info=%s" % (pid, tid, ea, info))
+            # dap_msg("Library unloaded: pid=%d tid=%d ea=0x%x info=%s" % (pid, tid, ea, info))
             return 0
 
         def dbg_process_attach(self, pid, tid, ea, name, base, size):
             dap_msg("Process attach pid=%d tid=%d ea=0x%x name=%s base=%x size=%x" % (pid, tid, ea, name, base, size))
 
         def dbg_process_detach(self, pid, tid, ea):
-            dap_msg("Process detached, pid=%d tid=%d ea=0x%x" % (pid, tid, ea))
+            # dap_msg("Process detached, pid=%d tid=%d ea=0x%x" % (pid, tid, ea))
             return 0
 
         def dbg_library_load(self, pid, tid, ea, name, base, size):
-            dap_msg("Library loaded: pid=%d tid=%d name=%s base=%x" % (pid, tid, name, base))
+            # dap_msg("Library loaded: pid=%d tid=%d name=%s base=%x" % (pid, tid, name, base))
+            pass
 
         def dbg_bpt(self, tid, ea):
-            dap_msg("Break point at 0x%x pid=%d" % (ea, tid))
+            # dap_msg("Break point at 0x%x pid=%d" % (ea, tid))
             # return values:
             #   -1 - to display a breakpoint warning dialog
             #        if the process is suspended.
@@ -291,8 +350,8 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             dap_msg("Process suspended")
 
         def dbg_exception(self, pid, tid, ea, exc_code, exc_can_cont, exc_ea, exc_info):
-            dap_msg("Exception: pid=%d tid=%d ea=0x%x exc_code=0x%x can_continue=%d exc_ea=0x%x exc_info=%s" % (
-                pid, tid, ea, exc_code & idaapi.BADADDR, exc_can_cont, exc_ea, exc_info))
+            # dap_msg("Exception: pid=%d tid=%d ea=0x%x exc_code=0x%x can_continue=%d exc_ea=0x%x exc_info=%s" % (
+            #   pid, tid, ea, exc_code & idaapi.BADADDR, exc_can_cont, exc_ea, exc_info))
             # return values:
             #   -1 - to display an exception warning dialog
             #        if the process is suspended.
@@ -301,7 +360,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             return 0
 
         def dbg_trace(self, tid, ea):
-            dap_msg("Trace tid=%d ea=0x%x" % (tid, ea))
+            # dap_msg("Trace tid=%d ea=0x%x" % (tid, ea))
             # return values:
             #   1  - do not log this trace event;
             #   0  - log it
@@ -309,16 +368,16 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
 
         def dbg_step_into(self):
             self.steps += 1
-            dap_msg("Step into - steps = {}".format(self.steps))
+            # dap_msg("Step into - steps = {}".format(self.steps))
             idaapi.step_into()
 
         def dbg_run_to(self, pid, tid=0, ea=0):
-            dap_msg("Runto: tid=%d" % tid)
+            # dap_msg("Runto: tid=%d" % tid)
             idaapi.continue_process()
 
         def dbg_step_over(self):
             self.steps += 1
-            dap_msg("Step over - steps = {}".format(self.steps))
+            # dap_msg("Step over - steps = {}".format(self.steps))
             idaapi.step_over()
             # eip = idc.GetRegValue("EIP")
             # dap_msg("0x%x %s" % (eip, idc.GetDisasm(eip)))
@@ -394,8 +453,28 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             self.load_configuration()
             self.set_debug_hooks()
 
+            self.monitor_thread = KillableThread(name="PatchMonitoring", target=self.patch_monitor_func,
+                                                 sleep_interval=1.0)
+            self.monitor_thread.start()
+
             print("=" * 80)
         return idaapi.PLUGIN_KEEP
+
+    def patch_monitor_func(self):
+        """Monitors patches and caches patch DB, since IDA has separate DBs for debugged processes and non-debugged
+        processes."""
+        # Don't collect patches if debugger is on
+        if idaapi.is_debugger_on() or idaapi.is_debugger_busy():
+            return
+
+        if not self.patched_bytes_db_lock.acquire(False):
+            return
+        else:
+            try:
+                patches = self.visit_patched_bytes()
+                self.patched_bytes_db = patches
+            finally:
+                self.patched_bytes_db_lock.release()
 
     def enable_patching(self):
         self.cfg[DapCfg.Enabled] = True
@@ -417,25 +496,27 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         if not self.cfg[DapCfg.Enabled]:
             dap_msg("Not applying patches to current process - patching currently disabled.")
             return
-        try:
-            patched_bytes = self.visit_patched_bytes()
-            if len(patched_bytes) < 1:
-                dap_msg("No patched bytes currently in database, nothing to do!")
-                return
-            if idaapi.suspend_process():
-                total_applied = 0
-                for patch in patched_bytes:
-                    total_applied += self.apply_byte_patch(patch)
-                dap_msg("[{}] total patches applied!".format(total_applied))
-                idc.resume_process()
-                return total_applied
-            else:
-                dap_err("Could not apply patches, could not suspend process!")
-        except Exception as e:
-            dap_err("Error encountered while applying patches to current debugged process.", str(e))
-        except:
-            dap_err("Unknown error encountered while applying patches to current debugged process.")
-        return -1
+
+        total_applied = 0
+        if idaapi.suspend_process():
+            self.patched_bytes_db_lock.acquire()
+            try:
+                if len(self.patched_bytes_db) < 1:
+                    dap_msg("No patched bytes currently in database, nothing to do!")
+                else:
+                    for patch in self.patched_bytes_db:
+                        total_applied += self.apply_byte_patch(patch)
+                    dap_msg("[{}] total patches applied!".format(total_applied))
+            except Exception as e:
+                dap_err("Error encountered while applying patches to current debugged process.", str(e))
+            except:
+                dap_err("Unknown error encountered while applying patches to current debugged process.")
+            finally:
+                self.patched_bytes_db_lock.release()
+        else:
+            dap_err("Could not apply patches, could not suspend process!")
+        idc.resume_process()
+        return total_applied
 
     @staticmethod
     def about():
@@ -454,6 +535,8 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         pass
 
     def term(self):
+        if self.monitor_thread:
+            self.monitor_thread.kill()
         self.unset_debug_hooks()
         self.save_configuration()
 
