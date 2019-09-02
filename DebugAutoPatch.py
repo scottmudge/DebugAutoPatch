@@ -1,5 +1,4 @@
-# DebugAutoPatch IDA Plugin - UNDER DEVELOPMENT
-# Additional support powered by Keystone Engine (http://www.keystone-engine.org).
+# DebugAutoPatch IDA Plugin - Release 0.2
 # By Scott Mudge, 2019 -- https://scottmudge.com.
 #
 # NOTE: This has been tested with IDA 7.0 - I have made attempts at backward/forward compatibility,
@@ -8,35 +7,20 @@
 # DebugAutoPatch is released under the GNU GPLv3 license. See LICENSE for more information.
 # Find information and latest version at https://github.com/scottmudge/DebugAutoPatch
 #
-# TBI = To-be-implemented
-#
 # This IDA plugin automatically applies byte patches stored in the NON-debug IDA "Patched bytes" database
-# to the debugged process at runtime. It does this at (by default) the entry-point of the application (or DLL),
-# or at a defined breakpoint (TBI). The process will then automatically resume with the patched bytes set in memory.
-# (TBI) Patches can also be classified into groups, which can be applied at the group's pre-defined breakpoints (useful
-# for packed binaries). Furthermore, patches can be applied arbitrarily at any point during the debug session.
+# to the debugged process at runtime. It does this at (by default) the entry-point of the application (or DLL).
+# The process will then automatically resume with the patched bytes set in memory.
 #
-# Why? Making modifications to application/rdata code can be tedious, IDA in particular. First the patches must be
+# Why? Making modifications to application/.rdata code can be tedious, IDA in particular. First the patches must be
 # made with the clunky patching tools, and then the binary must be patched on-disk, followed by re-executing the
-# application. Compared to features in x64dbg, this is just ridiculously tedious. Furthermore, patching the actual
-# binary introduces a number of potential issues which could be mitigated by leaving it untouched. For instance, if
-# the module or application performs hash checks to ensure it has not been modified.
-#
-# Settings and tools can be found in the standard "Edit > Patched bytes" menu. Context/right-click menus can also
-# be enabled in the settings dialog.
-#
-# (TBI) NOTICE:
-#   If you wish to use the new patching tool, it will require use of the Keystone engine. Please install
-#   using the instructions found here: (http://www.keystone-engine.org).
+# application. Furthermore, patching the actual binary introduces a number of potential issues which could be
+# mitigated by leaving it untouched. For instance, if the module or application performs hash checks to ensure it
+# has not been modified.
 #
 # Developer Notes:
 # --------------------
 # Change Log:
 #   * Just see the commit logs.
-#
-# TODO:
-#   * Add options to set custom patched-application breakpoint, and also option to disable automatic process resumption.
-#
 #
 
 from threading import Thread, Lock, Event
@@ -46,13 +30,6 @@ import os
 import idc
 import json
 
-
-# TEMPORARY!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# ENABLE_DEBUGGING = False
-# if ENABLE_DEBUGGING:
-#     import pydevd
-#     pydevd_pycharm.settrace('localhost', port=12345, stdoutToServer=True, stderrToServer=True)
-# /TEMPORARY!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #  ----------------------------------------- Globals -----------------------------------------
 DAP_VERSION = "0.2"
@@ -438,14 +415,14 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
                                              idaapi.SETMENU_APP)
                 idaapi.attach_action_to_menu("Edit/Patch program/Disable Auto-Patching", DapMCDisable.get_name(),
                                              idaapi.SETMENU_APP)
-                idaapi.attach_action_to_menu("Edit/Patch program/Apply Patch to Memory", DapMCApplyPatch.get_name(),
-                                             idaapi.SETMENU_APP)
-                idaapi.attach_action_to_menu("Edit/Patch program/Apply Patches to Current Process",
-                                             DapMCApplyPatchesToProc.get_name(), idaapi.SETMENU_APP)
+                # idaapi.attach_action_to_menu("Edit/Patch program/Apply Patch to Memory", DapMCApplyPatch.get_name(),
+                #                              idaapi.SETMENU_APP)
+                # idaapi.attach_action_to_menu("Edit/Patch program/Apply Patches to Current Process",
+                #                              DapMCApplyPatchesToProc.get_name(), idaapi.SETMENU_APP)
                 idaapi.attach_action_to_menu("Edit/Patch program/Null Menu 2", DapMCNull2.get_name(),
                                              idaapi.SETMENU_APP)
-                idaapi.attach_action_to_menu("Edit/Patch program/Check for DebugAutoPatch Update",
-                                             DapMCCheckUpdate.get_name(), idaapi.SETMENU_APP)
+                # idaapi.attach_action_to_menu("Edit/Patch program/Check for DebugAutoPatch Update",
+                #                              DapMCCheckUpdate.get_name(), idaapi.SETMENU_APP)
                 idaapi.attach_action_to_menu("Edit/Patch program/About DebugAutoPatch",
                                              DapMCAbout.get_name(), idaapi.SETMENU_APP)
             else:
@@ -455,18 +432,18 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
                                      self.enable_patching, None)
                 idaapi.add_menu_item("Edit/Patch program/", "Disable Auto-Patching", "", 1,
                                      self.disable_patching, None)
-                idaapi.add_menu_item("Edit/Patch program/", "Apply Patch to Memory", "", 1,
-                                     self.apply_patch_to_memory, None)
-                idaapi.add_menu_item("Edit/Patch program/", "Apply Patches to Current Process", "", 1,
-                                     self.apply_patches_to_current_proc, None)
+                # idaapi.add_menu_item("Edit/Patch program/", "Apply Patch to Memory", "", 1,
+                #                      self.apply_patch_to_memory, None)
+                # idaapi.add_menu_item("Edit/Patch program/", "Apply Patches to Current Process", "", 1,
+                #                      self.apply_patches_to_current_proc, None)
                 idaapi.add_menu_item("Edit/Patch program/", "-", "", 1, self.menu_null, None)
-                idaapi.add_menu_item("Edit/Patch program/", "Check for DebugAutoPatch Update", "", 1,
-                                     self.check_update, None)
+                # idaapi.add_menu_item("Edit/Patch program/", "Check for DebugAutoPatch Update", "", 1,
+                #                      self.check_update, None)
                 idaapi.add_menu_item("Edit/Patch program/", "About DebugAutoPatch", "", 1, self.about, None)
 
             print("=" * 80)
             print("DebugAutoPatch v{0} Copyright (c) Scott Mudge 2019".format(DAP_VERSION))
-            print("DebugAutoPatch is available from menu Edit | Patch program | ...")
+            print("DebugAutoPatch is available from menu \"Edit > Patch program\"")
             print("Find more information about DebugAutoPatch at the project github repository")
 
             self.load_configuration()
@@ -677,6 +654,5 @@ def PLUGIN_ENTRY():
     global DAP_INSTANCE
     logging.basicConfig(format='[%(levelname)s] %(message)s\t(%(module)s:%(funcName)s)')
     logging.root.setLevel(logging.DEBUG)
-    # idaapi.notify_when(idaapi.NW_OPENIDB, cache.initialize_cache)
     DAP_INSTANCE = DebugAutoPatchPlugin()
     return DAP_INSTANCE
