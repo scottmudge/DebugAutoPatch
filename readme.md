@@ -1,4 +1,5 @@
 #DebugAutoPatch
+
 ###Plugin for IDA Pro 7.0+
 
 About
