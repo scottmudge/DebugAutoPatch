@@ -56,13 +56,23 @@ DAP_WEBSITE = "https://github.com/scottmudge/DebugAutoPatch"
 DEBUG_MESSAGE_LEVEL = logging.INFO
 DAP_INITIALIZED = False
 
+DAP_INSTANCE = None
 
 def dap_msg(string):
     print("{}: {}".format(DAP_NAME, string))
 
 
-def dap_err(string, error):
-    print("{}: [ERROR] {}\n\t> Details: {}".format(DAP_NAME, string, error))
+def dap_warn(string, details = None):
+    if details:
+        print("{}: [WARNING] {}\n\t> Details: {}".format(DAP_NAME, string, details))
+    else:
+        print("{}: [WARNING] {}".format(DAP_NAME, string))
+
+def dap_err(string, details = None):
+    if details:
+        print("{}: [ERROR] {}\n\t> Details: {}".format(DAP_NAME, string, details))
+    else:
+        print("{}: [ERROR] {}".format(DAP_NAME, string))
 
 
 class DapCfg:
@@ -74,10 +84,10 @@ class DapCfg:
 
 
 # About form
-class DAP_About_Form(idaapi.Form):
+class DAPAboutForm(idaapi.Form):
     def __init__(self):
         # create About form
-        super(DAP_About_Form, self).__init__(
+        super(DAPAboutForm, self).__init__(
             r"""STARTITEM 0
 BUTTON YES* Open DebugAutoPatch Website
 DebugAutoPatch - About
@@ -108,7 +118,9 @@ DebugAutoPatch - About
 # Create menu handlers for IDA >= 700
 try:
     # noinspection PyBroadException
-    class Dap_Menu_Context(idaapi.action_handler_t):
+    class DapMenuContext(idaapi.action_handler_t):
+        label = None
+
         @classmethod
         def get_name(self):
             return self.__name__
@@ -152,49 +164,49 @@ try:
                 return idaapi.AST_ENABLE_ALWAYS
 
 
-    class DapMCEnable(Dap_Menu_Context):
+    class DapMCEnable(DapMenuContext):
         def activate(self, ctx):
             self.plugin.enable_patching()
             return 1
 
 
-    class DapMCDisable(Dap_Menu_Context):
+    class DapMCDisable(DapMenuContext):
         def activate(self, ctx):
             self.plugin.disable_patching()
             return 1
 
 
-    class DapMCCheckUpdate(Dap_Menu_Context):
+    class DapMCCheckUpdate(DapMenuContext):
         def activate(self, ctx):
             self.plugin.check_update()
             return 1
 
 
-    class DapMCAbout(Dap_Menu_Context):
+    class DapMCAbout(DapMenuContext):
         def activate(self, ctx):
             self.plugin.about()
             return 1
 
 
-    class DapMCApplyPatch(Dap_Menu_Context):
+    class DapMCApplyPatch(DapMenuContext):
         def activate(self, ctx):
             self.plugin.apply_patch_to_memory()
             return 1
 
 
-    class DapMCApplyPatchesToProc(Dap_Menu_Context):
+    class DapMCApplyPatchesToProc(DapMenuContext):
         def activate(self, ctx):
             self.plugin.apply_patches_to_current_proc()
             return 1
 
 
-    class DapMCNull(Dap_Menu_Context):
+    class DapMCNull(DapMenuContext):
         def activate(self, ctx):
             self.plugin.menu_null()
             return 1
 
 
-    class DapMCNull2(Dap_Menu_Context):
+    class DapMCNull2(DapMenuContext):
         def activate(self, ctx):
             self.plugin.menu_null()
             return 1
@@ -213,9 +225,8 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
 
     def __init__(self):
         self.old_ida = False
-        self.opts = None
+        self.cfg = None
         self.debug_hook = None
-        self.patched_bytes = []
 
     class PatchedByte:
         def __init__(self, addr, orig, patched):
@@ -246,13 +257,9 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
 
         def dbg_process_start(self, pid, tid, ea, name, base, size):
             dap_msg("Process start hook snagged -- applying patches...")
-            if idaapi.suspend_process():
-                # dap_msg("Process started, pid=%d tid=%d name=%s" % (pid, tid, name))
-                # TODO -- Apply patches here!
-                dap_msg("Patches applied!")
-                idc.resume_process()
-            else:
-                dap_err("could not apply patches", "could not suspend process")
+            result = DAP_INSTANCE.apply_patches_to_current_proc()
+            if result >= 0:
+                dap_msg("Success!")
 
         def dbg_process_exit(self, pid, tid, ea, code):
             dap_msg("Process exited pid=%d tid=%d ea=0x%x code=%d" % (pid, tid, ea, code))
@@ -341,7 +348,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         except:
             pass
 
-        self.opts = None
+        self.cfg = None
 
         if not DAP_INITIALIZED:
             DAP_INITIALIZED = True
@@ -391,25 +398,48 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         return idaapi.PLUGIN_KEEP
 
     def enable_patching(self):
-        self.opts['enabled'] = True
+        self.cfg[DapCfg.Enabled] = True
         dap_msg("Automatic patching enabled.")
         pass
 
     def disable_patching(self):
-        self.opts['enabled'] = False
+        self.cfg[DapCfg.Enabled] = False
         dap_msg("Automatic patching disabled.")
         pass
 
     def apply_patch_to_memory(self):
-        self.visit_patched_bytes()
+        # self.visit_patched_bytes()
         pass
 
     def apply_patches_to_current_proc(self):
-        pass
+        """Applies patches to current process. Must first suspend process, check debugger is not active, then
+        apply them."""
+        if not self.cfg[DapCfg.Enabled]:
+            dap_msg("Not applying patches to current process - patching currently disabled.")
+            return
+        try:
+            patched_bytes = self.visit_patched_bytes()
+            if len(patched_bytes) < 1:
+                dap_msg("No patched bytes currently in database, nothing to do!")
+                return
+            if idaapi.suspend_process():
+                total_applied = 0
+                for patch in patched_bytes:
+                    total_applied += self.apply_byte_patch(patch)
+                dap_msg("[{}] total patches applied!".format(total_applied))
+                idc.resume_process()
+                return total_applied
+            else:
+                dap_err("Could not apply patches, could not suspend process!")
+        except Exception as e:
+            dap_err("Error encountered while applying patches to current debugged process.", str(e))
+        except:
+            dap_err("Unknown error encountered while applying patches to current debugged process.")
+        return -1
 
     @staticmethod
     def about():
-        f = DAP_About_Form()
+        f = DAPAboutForm()
         f.Execute()
         f.Free()
         pass
@@ -448,36 +478,49 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
     def apply_byte_patch(self, patched_byte_ojb):
         # check if debugger is even running
         if not idaapi.is_debugger_on():
-            dap_err("Cannot apply patched", "debugger is not currently on")
+            dap_warn("Cannot apply patched - debugger is not currently on!")
             return
         if not idaapi.is_debugger_busy():
-            dap_err("Cannot apply patched", "debugger is not paused")
+            dap_warn("Cannot apply patched - debugger is not paused!")
 
-        # patched byte in debugger memory
-        if not self.old_ida:
-            idc.patch_dbg_byte(patched_byte_ojb.addr, patched_byte_ojb.patched)
-            idaapi.invalidate_dbgmem_contents(patched_byte_ojb.addr, 1)
-        else:
-            idc.PatchDbgByte(patched_byte_ojb.addr, patched_byte_ojb.patched)
-            idaapi.invalidate_dbgmem_contents(patched_byte_ojb.addr, 1)
+        try:
+            # patched byte in debugger memory
+            if not self.old_ida:
+                result = idc.patch_dbg_byte(patched_byte_ojb.addr, patched_byte_ojb.patched)
+                idaapi.invalidate_dbgmem_contents(patched_byte_ojb.addr, 1)
+            else:
+                result = idc.PatchDbgByte(patched_byte_ojb.addr, patched_byte_ojb.patched)
+                idaapi.invalidate_dbgmem_contents(patched_byte_ojb.addr, 1)
+            return result
+        except Exception as e:
+            dap_err("Error encountered while applying byte patch to memory!", str(e))
+        except:
+            dap_err("Unknown error encountered while applying byte patch to memory!")
+        return 0
 
     def visit_patched_bytes(self):
-        visitor = self.PatchVisitor()
-        result = idaapi.visit_patched_bytes(0, idaapi.BADADDR, visitor)
-        if result != 0:
-            dap_err("visit_patched_bytes() returned unexpected result", "error code ({})".format(result))
-            self.patched_bytes = None
-        else:
-            dap_msg("Total Patched Bytes: {}  ...  Total Skipped Bytes: {}".format(visitor.patched, visitor.skipped))
-            self.patched_bytes = visitor.patched_bytes
+        """Iterates through patched bytes and stores them in a buffer."""
+        try:
+            visitor = self.PatchVisitor()
+            result = idaapi.visit_patched_bytes(0, idaapi.BADADDR, visitor)
+            if result != 0:
+                dap_err("visit_patched_bytes() returned unexpected result", "error code ({})".format(result))
+                return []
+            else:
+                dap_msg("Total Patched Bytes: {}  ...  Total Skipped Bytes: {}".format(visitor.patched, visitor.skipped))
+            return visitor.patched_bytes
+        except Exception as e:
+            dap_err("Exception encountered while visiting patched bytes", str(e))
+        except:
+            dap_err("Unknown")
 
     def load_configuration(self):
-        self.opts = {}
+        self.cfg = {}
         save_cfg = False
         # load configuration from file
         try:
             f = open(DAP_CONFIG_FILE_PATH, "rt")
-            self.opts = json.load(f)
+            self.cfg = json.load(f)
             f.close()
         except IOError:
             dap_msg("Failed to load config file -- using defaults.")
@@ -486,18 +529,18 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             dap_err("Failed to load config file.", str(e))
 
         # Enables or disables patching at debug time
-        if DapCfg.Enabled not in self.opts:
-            self.opts[DapCfg.Enabled] = True
+        if DapCfg.Enabled not in self.cfg:
+            self.cfg[DapCfg.Enabled] = True
         # Primary patched application address - set to BADADDR = use application start
-        if DapCfg.PrimaryPatchAddr not in self.opts:
-            self.opts[DapCfg.PrimaryPatchAddr] = idaapi.BADADDR
+        if DapCfg.PrimaryPatchAddr not in self.cfg:
+            self.cfg[DapCfg.PrimaryPatchAddr] = idaapi.BADADDR
         if save_cfg:
             self.save_configuration()
 
     def save_configuration(self):
-        if self.opts:
+        if self.cfg:
             try:
-                json.dump(self.opts, open(DAP_CONFIG_FILE_PATH, "wt"))
+                json.dump(self.cfg, open(DAP_CONFIG_FILE_PATH, "wt"))
             except Exception as e:
                 dap_err("Failed to save configuration file", str(e))
             else:
@@ -505,7 +548,9 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
 
 
 def PLUGIN_ENTRY():
+    global DAP_INSTANCE
     logging.basicConfig(format='[%(levelname)s] %(message)s\t(%(module)s:%(funcName)s)')
     logging.root.setLevel(logging.DEBUG)
     # idaapi.notify_when(idaapi.NW_OPENIDB, cache.initialize_cache)
-    return DebugAutoPatchPlugin()
+    DAP_INSTANCE = DebugAutoPatchPlugin()
+    return DAP_INSTANCE
