@@ -8,35 +8,20 @@
 # DebugAutoPatch is released under the GNU GPLv3 license. See LICENSE for more information.
 # Find information and latest version at https://github.com/scottmudge/DebugAutoPatch
 #
-# TBI = To-be-implemented
-#
 # This IDA plugin automatically applies byte patches stored in the NON-debug IDA "Patched bytes" database
-# to the debugged process at runtime. It does this at (by default) the entry-point of the application (or DLL),
-# or at a defined breakpoint (TBI). The process will then automatically resume with the patched bytes set in memory.
-# (TBI) Patches can also be classified into groups, which can be applied at the group's pre-defined breakpoints (useful
-# for packed binaries). Furthermore, patches can be applied arbitrarily at any point during the debug session.
+# to the debugged process at runtime. It does this at (by default) the entry-point of the application (or DLL).
+# The process will then automatically resume with the patched bytes set in memory.
 #
-# Why? Making modifications to application/rdata code can be tedious, IDA in particular. First the patches must be
+# Why? Making modifications to application/.rdata code can be tedious, IDA in particular. First the patches must be
 # made with the clunky patching tools, and then the binary must be patched on-disk, followed by re-executing the
-# application. Compared to features in x64dbg, this is just ridiculously tedious. Furthermore, patching the actual
-# binary introduces a number of potential issues which could be mitigated by leaving it untouched. For instance, if
-# the module or application performs hash checks to ensure it has not been modified.
-#
-# Settings and tools can be found in the standard "Edit > Patched bytes" menu. Context/right-click menus can also
-# be enabled in the settings dialog.
-#
-# (TBI) NOTICE:
-#   If you wish to use the new patching tool, it will require use of the Keystone engine. Please install
-#   using the instructions found here: (http://www.keystone-engine.org).
+# application. Furthermore, patching the actual binary introduces a number of potential issues which could be
+# mitigated by leaving it untouched. For instance, if the module or application performs hash checks to ensure it
+# has not been modified.
 #
 # Developer Notes:
 # --------------------
 # Change Log:
 #   * Just see the commit logs.
-#
-# TODO:
-#   * Add options to set custom patched-application breakpoint, and also option to disable automatic process resumption.
-#
 #
 
 from threading import Thread, Lock, Event
