@@ -25,6 +25,8 @@
 #
 
 from threading import Thread, Lock, Event
+from idaapi import PluginForm
+from PyQt5 import QtCore, QtGui, QtWidgets
 import logging
 import idaapi
 import os
@@ -38,6 +40,33 @@ import json
 #     import pydevd
 #     pydevd_pycharm.settrace('localhost', port=12345, stdoutToServer=True, stderrToServer=True)
 # /TEMPORARY!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+#  ------------------------------------- User Interface --------------------------------------
+class TestPluginForm(PluginForm):
+    def OnCreate(self, form):
+        self.parent = self.FormToPyQtWidget(form)
+        self.PopulateForm()
+
+    def PopulateForm(self):
+        layout = QtWidgets.QVBoxLayout()
+
+        layout.addWidget(
+            QtWidgets.QLabel("This is a test <font color=green>this is green</font>.")
+        )
+
+        layout.addWidget(
+            QtWidgets.QLabel("This is a second test line.")
+        )
+
+        self.parent.setLayout(layout)
+
+    def OnClose(self, form):
+
+        pass
+
+# ---------------------------------------------------------------------------------------------
+
 
 #  ----------------------------------------- Globals -----------------------------------------
 DAP_VERSION = "0.2"
@@ -538,9 +567,11 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
     @staticmethod
     def about():
         """About window."""
-        f = DAPAboutForm()
-        f.Execute()
-        f.Free()
+        # f = DAPAboutForm()
+        # f.Execute()
+        # f.Free()
+        plg = TestPluginForm()
+        plg.Show("About", options=PluginForm.WOPN_MDI)
         pass
 
     def check_update(self):
