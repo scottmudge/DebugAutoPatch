@@ -45,10 +45,10 @@ from PyQt5.QtCore import QSize, QRect
 from PyQt5.QtGui import QIcon, QPixmap, QImage
 
 # TEMPORARY!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# ENABLE_DEBUGGING = False
-# if ENABLE_DEBUGGING:
-#     import pydevd
-#     pydevd_pycharm.settrace('localhost', port=12345, stdoutToServer=True, stderrToServer=True)
+ENABLE_DEBUGGING = False
+if ENABLE_DEBUGGING:
+    import pydevd
+    pydevd.settrace('localhost', port=12345, stdoutToServer=True, stderrToServer=True)
 # /TEMPORARY!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #  ----------------------------------------- Globals -----------------------------------------
@@ -512,6 +512,8 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             dap_warn("Patch database path ({}) is not a file. Cannot load or save database.".format(self.patch_db_path))
             return
 
+        failed = True
+
         # Acquire lock and load
         self.patch_db_lock.acquire()
         try:
@@ -520,14 +522,17 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             if self.patch_db.cookie != int(DAP_DB_COOKIE):
                 raise IOError("Invalid database cookie. File is corrupt or from an incompatible earlier version.")
             dap_msg("Loaded patch database from: {}".format(self.patch_db_path))
+            failed = False
         except Exception as e:
             dap_warn("Error loading patch database.", str(e))
-            self.initialize_default_db()
         except:
             dap_warn("Unknown error while loading patch database.")
-            self.initialize_default_db()
         finally:
             self.patch_db_lock.release()
+
+        # Initialize a new DB if loading failed.
+        if failed:
+            self.initialize_default_db()
 
     def init(self):
         """Initialization routine."""
