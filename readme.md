@@ -34,16 +34,8 @@ Features
 * No extra breakpoints are added and no existing breakpoints are modified.
 * The ability to disable automatic patching (and thus revert the binary to it's "original" state).
     * These options are available in the existing "Edit > Patch program" menu.
-    
-Example Video
-=====
-Click to enlarge...
 
-[![Video example of DebugAutoPatch](https://i.imgur.com/LeC61Nl.gif)](https://giant.gfycat.com/TornMiserableCatbird.webm)
-
-___Video Description___
-
-Shown is an example of using DebugAutoPatch to modify a `jle` short jump to `nop` instructions while __not__ debugging, along with modifying the return value of the subroutine __while__ debugging. Normally this would require patching the binary file itself on disk after every modification. But the video shows that not only is the initial patch automatically applied to each debug session, but also that the patch made while debugging persists into future debug sessions. Additionally shown is the ability to disable  automatic patching, which effectively reverts the patches (visible in the debugged assembly and decompiled code).
+[![Video example of DebugAutoPatch](https://i.imgur.com/LeC61Nl.gif)](https://i.imgur.com/LeC61Nl.gif)
 
 Notes
 =====
