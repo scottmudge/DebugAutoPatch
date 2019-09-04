@@ -29,6 +29,7 @@
 from threading import Thread, Lock, Event
 from idaapi import PluginForm
 import cPickle as pickle
+import gzip
 import logging
 import idaapi
 import os
@@ -313,11 +314,15 @@ except:
     pass
 
 
-class PatchedByte:
+class PatchedBytes:
     """Container for patched byte type."""
 
     def __init__(self, addr, orig, patched):
         self.addr = addr
+
+        if len(orig) != len(patched):
+            dap_err("Error creating PatchedBytes object - len(orig) != len(patched).")
+
         self.orig = orig
         self.patched = patched
 
@@ -333,11 +338,28 @@ class PatchGroup:
 
 class GroupDatabase:
     """Container for group database. Contains cookie to ensure serialized data is fine and version checking."""
-
     def __init__(self):
         self.cookie = int(DAP_DB_COOKIE)
-        self.groups = []
-        self.groups.append(PatchGroup("default"))
+        self.groups = {}
+        self.add_group("default", True)
+
+    def get_group(self, name):
+        """Returns group by name."""
+        if name not in self.groups:
+            dap_warn("Requested group [{}] is not in group database.".format(name))
+            return None
+        return self.groups[name]
+
+    def add_group(self, name, enabled = True):
+        """Adds group to database."""
+        self.groups.update({name : PatchGroup(name, enabled)})
+
+    def delete_group(self, name):
+        """Deletes group from database."""
+        if name in self.groups:
+            del self.groups[name]
+        else:
+            dap_warn("Requested group [{}] not found in group database. Cannot delete.".format(name))
 
 
 class DebugAutoPatchPlugin(idaapi.plugin_t):
@@ -353,8 +375,15 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         and are applied when debugger activates."""
         def __init__(self):
             self.skipped = 0
-            self.patched = 0
-            self.patched_bytes = []
+            self.total_patched = 0
+            self.total_bytes = 0
+            self.patches = []
+
+            self.last_addr = -2
+
+            self.patch_start_addr = 0
+            self.patched_bytes_buf = []
+            self.orig_bytes_buf = []
 
         def __call__(self, ea, fpos, orig, patch_val, cnt=()):
             try:
@@ -362,12 +391,34 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
                     self.skipped += 1
                     dap_msg("fpos invalid ({}) -- patch skipped".format(fpos))
                 else:
-                    self.patched += 1
-                    # dap_msg(" ea: %x \\ fpos: %x \\ o: %x \\ v: %x" % (ea, fpos, orig, patch_val))
-                    self.patched_bytes.append(PatchedByte(ea, orig, patch_val))
+                    # Check for same address
+                    if self.last_addr == ea:
+                        dap_warn("Same address encountered while visiting patches: {}".format(ea))
+                        return 0
+
+                    self.total_bytes += 1
+
+                    # If this is a non-contiguous patch
+                    if abs(self.last_addr - ea) > 1:
+                        self.consolidate()
+                        self.patch_start_addr = ea
+
+                    self.patched_bytes_buf.append(patch_val)
+                    self.orig_bytes_buf.append(orig)
+
+                    self.last_addr = ea
                 return 0
             except:
                 return
+
+        def consolidate(self):
+            """Consolidates buffers."""
+            if len(self.patched_bytes_buf) > 0 and (len(self.patched_bytes_buf) == len(self.orig_bytes_buf)):
+                self.patches.append(PatchedBytes(self.patch_start_addr, self.orig_bytes_buf, self.patched_bytes_buf))
+
+            self.patched_bytes_buf = []
+            self.orig_bytes_buf = []
+            self.patch_start_addr = 0
 
     class DebugHook(idaapi.DBG_Hooks):
         def __init__(self, *args):
@@ -376,7 +427,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
 
         def dbg_process_start(self, pid, tid, ea, name, base, size):
             dap_msg("Process start hook snagged -- applying patches...")
-            result = DAP_INSTANCE.apply_patches_to_current_proc()
+            result = DAP_INSTANCE.apply_all_patches_to_current_proc()
             if result >= 0:
                 dap_msg("Success!")
 
@@ -453,7 +504,6 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         self.term()
 
     def __init__(self):
-        self.old_ida = False
         self.cfg = None
         self.debug_hook = None
         self.patch_db = GroupDatabase()
@@ -495,7 +545,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         # Acquire lock and dump
         self.patch_db_lock.acquire()
         try:
-            with open(self.patch_db_path, 'wb') as db_file:
+            with gzip.open(self.patch_db_path, 'wb') as db_file:
                 pickle.dump(self.patch_db, db_file)
             dap_msg("Saved patch database to: {}".format(self.patch_db_path))
         except Exception as e:
@@ -523,7 +573,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         # Acquire lock and load
         self.patch_db_lock.acquire()
         try:
-            with open(self.patch_db_path, 'rb') as db_file:
+            with gzip.open(self.patch_db_path, 'rb') as db_file:
                 self.patch_db = pickle.load(db_file)
             if self.patch_db.cookie != int(DAP_DB_COOKIE):
                 raise IOError("Invalid database cookie. File is corrupt or from an incompatible earlier version.")
@@ -657,14 +707,22 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         """Adds a new patch to database."""
         pass
 
-    def apply_patches_to_current_proc(self):
-        """Applies patches to current process. Must first suspend process, check debugger is not active, then
-        apply them."""
+    def apply_named_patch_group_to_current_proc(self, patch_group_name):
+        """Applies a named patch group to current process."""
+        pass
+
+    def apply_patch_group_to_current_proc(self, patch_group):
+        """Applies supplied patch group to current process."""
+        pass
+
+    def apply_all_patches_to_current_proc(self):
+        """Applies ALL patches to current process."""
         if not self.cfg[DapCfg.Enabled]:
             dap_msg("Not applying patches to current process - patching currently disabled.")
             return
 
         total_applied = 0
+        total_bytes_patched = 0
         if idaapi.suspend_process():
             self.patched_bytes_db_lock.acquire()
             try:
@@ -672,8 +730,10 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
                     dap_msg("No patched bytes currently in database, nothing to do!")
                 else:
                     for patch in self.patched_bytes_db:
-                        total_applied += self.apply_byte_patch(patch)
-                    dap_msg("[{}] total patches applied!".format(total_applied))
+                        total_applied += 1
+                        total_bytes_patched += self.apply_byte_patch(patch)
+                    dap_msg("[{}] total patches applied / [{}] total bytes modified!"
+                            .format(total_applied, total_bytes_patched))
             except Exception as e:
                 dap_err("Error encountered while applying patches to current debugged process.", str(e))
             except:
@@ -732,27 +792,41 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         except:
             pass
 
-    def apply_byte_patch(self, patched_byte_ojb):
+    @staticmethod
+    def apply_byte_patch(patched_byte_ojb):
         """Applies a byte patch to current debugger memory."""
         # check if debugger is even running
         if not idaapi.is_debugger_on():
             dap_warn("Cannot apply patch - debugger is not currently on!")
             return 0
 
-        try:
-            # patched byte in debugger memory
-            if not self.old_ida:
-                result = idc.patch_dbg_byte(patched_byte_ojb.addr, patched_byte_ojb.patched)
-            else:
-                result = idc.PatchDbgByte(patched_byte_ojb.addr, patched_byte_ojb.patched)
-            if result > 0:
-                idaapi.invalidate_dbgmem_contents(patched_byte_ojb.addr, 1) # addr, size
-            return result
-        except Exception as e:
-            dap_err("Error encountered while applying byte patch to memory!", str(e))
-        except:
-            dap_err("Unknown error encountered while applying byte patch to memory!")
-        return 0
+        num_orig = len(patched_byte_ojb.orig)
+        num_patched = len(patched_byte_ojb.patched)
+        start_addr = patched_byte_ojb.addr
+
+        total_applied = 0
+
+        if num_orig != num_patched:
+            dap_err("Cannot apply patch, length of orig bytes [{}] != length of patched bytes [{}]!"
+                    .format(num_orig, num_patched))
+            return 0
+
+        for i in range(0, num_patched):
+            addr = start_addr + i
+            byte = patched_byte_ojb.patched[i]
+
+            try:
+                # patched byte in debugger memory
+                total_applied += idc.PatchDbgByte(addr, byte)
+            except Exception as e:
+                dap_err("Error encountered while applying byte patch to memory!", str(e))
+            except:
+                dap_err("Unknown error encountered while applying byte patch to memory!")
+
+        if total_applied > 0:
+            idaapi.invalidate_dbgmem_contents(start_addr, total_applied)  # addr, size
+
+        return total_applied
 
     def visit_patched_bytes(self):
         """Iterates through patched bytes and stores them in a buffer."""
@@ -762,7 +836,8 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
             if result != 0:
                 dap_err("visit_patched_bytes() returned unexpected result", "error code ({})".format(result))
                 return []
-            return visitor.patched_bytes
+            visitor.consolidate()
+            return visitor.patches
         except Exception as e:
             dap_err("Exception encountered while visiting patched bytes", str(e))
         except:
