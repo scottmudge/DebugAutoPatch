@@ -31,7 +31,7 @@
      <item>
       <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
-        <widget class="QGroupBox" name="groupBox">
+        <widget class="QGroupBox" name="groupBox_PatchGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
            <horstretch>0</horstretch>
@@ -41,7 +41,7 @@
          <property name="minimumSize">
           <size>
            <width>190</width>
-           <height>100</height>
+           <height>104</height>
           </size>
          </property>
          <property name="font">
@@ -62,7 +62,7 @@
          <property name="checkable">
           <bool>false</bool>
          </property>
-         <widget class="QComboBox" name="comboBox">
+         <widget class="QComboBox" name="comboBox_PatchGroup">
           <property name="geometry">
            <rect>
             <x>10</x>
@@ -91,7 +91,7 @@
            <string>Selected</string>
           </property>
          </widget>
-         <widget class="QPushButton" name="pushButton_2">
+         <widget class="QPushButton" name="pushButton_AddGroup">
           <property name="geometry">
            <rect>
             <x>10</x>
@@ -110,7 +110,7 @@
            <string>Add</string>
           </property>
          </widget>
-         <widget class="QPushButton" name="pushButton_3">
+         <widget class="QPushButton" name="pushButton_DeleteGroup">
           <property name="geometry">
            <rect>
             <x>100</x>
@@ -132,7 +132,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QGroupBox" name="groupBox_2">
+        <widget class="QGroupBox" name="groupBox_PatchInjection">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Ignored" vsizetype="Minimum">
            <horstretch>0</horstretch>
@@ -142,7 +142,7 @@
          <property name="minimumSize">
           <size>
            <width>0</width>
-           <height>200</height>
+           <height>140</height>
           </size>
          </property>
          <property name="font">
@@ -170,10 +170,10 @@
            </font>
           </property>
           <property name="text">
-           <string>Selected</string>
+           <string>Method</string>
           </property>
          </widget>
-         <widget class="QComboBox" name="comboBox_3">
+         <widget class="QComboBox" name="comboBox_InjectionMethod">
           <property name="geometry">
            <rect>
             <x>10</x>
@@ -181,6 +181,71 @@
             <width>171</width>
             <height>22</height>
            </rect>
+          </property>
+          <property name="toolTip">
+           <string>[Startup] This injects the patch at application startup, as soon as the debugger starts.
+[Breakpoint] This injects the patch at the breakpoint specified. Be sure to check whether or not you'd like to automatically resume execution.</string>
+          </property>
+          <property name="currentText">
+           <string/>
+          </property>
+          <property name="frame">
+           <bool>true</bool>
+          </property>
+         </widget>
+         <widget class="QLineEdit" name="lineEdit">
+          <property name="geometry">
+           <rect>
+            <x>10</x>
+            <y>85</y>
+            <width>171</width>
+            <height>20</height>
+           </rect>
+          </property>
+          <property name="font">
+           <font>
+            <family>Fixedsys</family>
+            <weight>50</weight>
+            <bold>false</bold>
+           </font>
+          </property>
+         </widget>
+         <widget class="QLabel" name="label_4">
+          <property name="geometry">
+           <rect>
+            <x>10</x>
+            <y>65</y>
+            <width>171</width>
+            <height>20</height>
+           </rect>
+          </property>
+          <property name="font">
+           <font>
+            <weight>50</weight>
+            <bold>false</bold>
+           </font>
+          </property>
+          <property name="text">
+           <string>Breakpoint</string>
+          </property>
+         </widget>
+         <widget class="QCheckBox" name="checkBox">
+          <property name="geometry">
+           <rect>
+            <x>10</x>
+            <y>112</y>
+            <width>171</width>
+            <height>17</height>
+           </rect>
+          </property>
+          <property name="font">
+           <font>
+            <weight>50</weight>
+            <bold>false</bold>
+           </font>
+          </property>
+          <property name="text">
+           <string>Resume After Injection</string>
           </property>
          </widget>
         </widget>
@@ -203,7 +268,7 @@
      <item>
       <layout class="QVBoxLayout" name="verticalLayout">
        <item>
-        <widget class="QTableView" name="tableView">
+        <widget class="QTableView" name="tableView_">
          <property name="gridStyle">
           <enum>Qt::DotLine</enum>
          </property>
