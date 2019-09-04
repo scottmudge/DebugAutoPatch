@@ -313,6 +313,33 @@ except:
     pass
 
 
+class PatchedByte:
+    """Container for patched byte type."""
+
+    def __init__(self, addr, orig, patched):
+        self.addr = addr
+        self.orig = orig
+        self.patched = patched
+
+
+class PatchGroup:
+    """Container for patch group."""
+
+    def __init__(self, name, enabled=True):
+        self.patches = []
+        self.name = name
+        self.enabled = enabled
+
+
+class GroupDatabase:
+    """Container for group database. Contains cookie to ensure serialized data is fine and version checking."""
+
+    def __init__(self):
+        self.cookie = int(DAP_DB_COOKIE)
+        self.groups = []
+        self.groups.append(PatchGroup("default"))
+
+
 class DebugAutoPatchPlugin(idaapi.plugin_t):
     # This keeps the plugin in memory, important for hooking callbacks
     flags = idaapi.PLUGIN_KEEP
@@ -320,27 +347,6 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
     help = "See https://github.com/scottmudge/IDA_DebugAutoPatch/blob/master/readme.md"
     wanted_name = "DebugAutoPatch"
     wanted_hotkey = ""
-
-    class PatchedByte:
-        """Container for patched byte type."""
-        def __init__(self, addr, orig, patched):
-            self.addr = addr
-            self.orig = orig
-            self.patched = patched
-
-    class PatchGroup:
-        """Container for patch group."""
-        def __init__(self, name, enabled=True):
-            self.patches = []
-            self.name = name
-            self.enabled = enabled
-
-    class GroupDatabase:
-        """Container for group database. Contains cookie to ensure serialized data is fine and version checking."""
-        def __init__(self):
-            self.cookie = int(DAP_DB_COOKIE)
-            self.groups = []
-            self.groups.append(DebugAutoPatchPlugin.PatchGroup("default"))
 
     class PatchVisitor(object):
         """Used for visiting patched bytes when debugger is not active. These patches are then stored in a buffer,
@@ -358,7 +364,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
                 else:
                     self.patched += 1
                     # dap_msg(" ea: %x \\ fpos: %x \\ o: %x \\ v: %x" % (ea, fpos, orig, patch_val))
-                    self.patched_bytes.append(DebugAutoPatchPlugin.PatchedByte(ea, orig, patch_val))
+                    self.patched_bytes.append(PatchedByte(ea, orig, patch_val))
                 return 0
             except:
                 return
@@ -450,7 +456,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         self.old_ida = False
         self.cfg = None
         self.debug_hook = None
-        self.patch_db = self.GroupDatabase()
+        self.patch_db = GroupDatabase()
         self.patch_db_lock = Lock()
         self.patched_bytes_db = []
         self.patched_bytes_db_lock = Lock()
@@ -462,7 +468,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         """Initializes a default database."""
         self.patch_db_lock.acquire()
         try:
-            self.patch_db = self.GroupDatabase()
+            self.patch_db = GroupDatabase()
         except Exception as e:
             dap_warn("Error initializing default patch group database.", str(e))
         except:
