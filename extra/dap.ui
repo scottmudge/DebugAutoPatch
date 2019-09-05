@@ -31,6 +31,13 @@
      <item>
       <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
+        <widget class="QLabel" name="label_2">
+         <property name="text">
+          <string>TextLabel</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QGroupBox" name="groupBox_PatchGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
@@ -233,9 +240,9 @@
           <property name="geometry">
            <rect>
             <x>10</x>
-            <y>112</y>
+            <y>113</y>
             <width>171</width>
-            <height>17</height>
+            <height>21</height>
            </rect>
           </property>
           <property name="font">
