@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>400</width>
+    <width>978</width>
     <height>450</height>
    </rect>
   </property>
@@ -72,7 +72,7 @@
            </rect>
           </property>
          </widget>
-         <widget class="QLabel" name="label">
+         <widget class="QLabel" name="label_SelectedGroup">
           <property name="geometry">
            <rect>
             <x>10</x>
@@ -154,7 +154,7 @@
          <property name="title">
           <string>Patch Injection</string>
          </property>
-         <widget class="QLabel" name="label_3">
+         <widget class="QLabel" name="label_InjectionMethod">
           <property name="geometry">
            <rect>
             <x>10</x>
@@ -196,7 +196,7 @@
            <bool>true</bool>
           </property>
          </widget>
-         <widget class="QLineEdit" name="lineEdit">
+         <widget class="QLineEdit" name="lineEdit_Breakpoint">
           <property name="geometry">
            <rect>
             <x>10</x>
@@ -213,7 +213,7 @@
            </font>
           </property>
          </widget>
-         <widget class="QLabel" name="label_4">
+         <widget class="QLabel" name="label_Breakpoint">
           <property name="geometry">
            <rect>
             <x>10</x>
@@ -267,6 +267,28 @@
         </spacer>
        </item>
        <item>
+        <widget class="QLabel" name="label_Version">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>185</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="text">
+          <string>TextLabel</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignBottom|Qt::AlignRight|Qt::AlignTrailing</set>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QLabel" name="label_BottomLogo">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
@@ -314,7 +336,7 @@
          </property>
          <layout class="QGridLayout" name="gridLayout_2">
           <item row="0" column="0">
-           <widget class="QTableView" name="tableView_Patches">
+           <widget class="QTableWidget" name="tableWidget_Patches">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
               <horstretch>0</horstretch>
@@ -330,6 +352,24 @@
             <property name="gridStyle">
              <enum>Qt::DotLine</enum>
             </property>
+            <property name="rowCount">
+             <number>0</number>
+            </property>
+            <property name="columnCount">
+             <number>6</number>
+            </property>
+            <attribute name="horizontalHeaderCascadingSectionResizes">
+             <bool>false</bool>
+            </attribute>
+            <attribute name="horizontalHeaderStretchLastSection">
+             <bool>true</bool>
+            </attribute>
+            <column/>
+            <column/>
+            <column/>
+            <column/>
+            <column/>
+            <column/>
            </widget>
           </item>
          </layout>
