@@ -189,6 +189,9 @@
           <property name="currentText">
            <string/>
           </property>
+          <property name="maxVisibleItems">
+           <number>10</number>
+          </property>
           <property name="frame">
            <bool>true</bool>
           </property>
@@ -229,7 +232,7 @@
            <string>Breakpoint</string>
           </property>
          </widget>
-         <widget class="QCheckBox" name="checkBox">
+         <widget class="QCheckBox" name="checkBox_ResumeAfterInjection">
           <property name="geometry">
            <rect>
             <x>10</x>
@@ -293,7 +296,7 @@
      <item>
       <layout class="QVBoxLayout" name="verticalLayout">
        <item>
-        <widget class="QGroupBox" name="groupBox">
+        <widget class="QGroupBox" name="groupBox_Patches">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
            <horstretch>0</horstretch>
@@ -311,7 +314,7 @@
          </property>
          <layout class="QGridLayout" name="gridLayout_2">
           <item row="0" column="0">
-           <widget class="QTableView" name="tableView_">
+           <widget class="QTableView" name="tableView_Patches">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
               <horstretch>0</horstretch>
