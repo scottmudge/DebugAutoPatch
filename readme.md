@@ -5,6 +5,8 @@ Patching system improvement plugin for IDA.
 
 __Current Version__: 0.2
 
+_Note_: Active development is currently taking place on the `devel` branch. New features and UI elements are rapidly being implemented. A new release should be expected in the next couple of weeks.
+
 About
 =====
 
