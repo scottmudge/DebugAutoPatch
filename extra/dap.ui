@@ -41,7 +41,7 @@
          <property name="minimumSize">
           <size>
            <width>190</width>
-           <height>104</height>
+           <height>126</height>
           </size>
          </property>
          <property name="font">
@@ -127,6 +127,25 @@
           </property>
           <property name="text">
            <string>Delete</string>
+          </property>
+         </widget>
+         <widget class="QCheckBox" name="checkBox_PatchGroupEnabled">
+          <property name="geometry">
+           <rect>
+            <x>11</x>
+            <y>98</y>
+            <width>171</width>
+            <height>21</height>
+           </rect>
+          </property>
+          <property name="font">
+           <font>
+            <weight>50</weight>
+            <bold>false</bold>
+           </font>
+          </property>
+          <property name="text">
+           <string>Enabled</string>
           </property>
          </widget>
         </widget>
@@ -236,7 +255,7 @@
           <property name="geometry">
            <rect>
             <x>10</x>
-            <y>113</y>
+            <y>112</y>
             <width>171</width>
             <height>21</height>
            </rect>
