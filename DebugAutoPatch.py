@@ -78,14 +78,14 @@ def dap_msg(string):
     print("[{}]: {}".format(DAP_NAME, string))
 
 
-def dap_warn(string, details = None):
+def dap_warn(string, details=None):
     if details:
         print("[{} | WARNING]: {}\n\t> Details: {}".format(DAP_NAME, string, details))
     else:
         print("[{} | WARNING]: {}".format(DAP_NAME, string))
 
 
-def dap_err(string, details = None):
+def dap_err(string, details=None):
     if details:
         print("[{} | ERROR]: {}\n\t> Details: {}".format(DAP_NAME, string, details))
     else:
@@ -169,18 +169,12 @@ class KillableThread(Thread):
 
 
 #  ------------------------------------- User Interface --------------------------------------
-class ClickableLabel(QLabel):
-    clicked = pyqtSignal(str)
-
-    def __init__(self):
-        super(ClickableLabel, self).__init__()
-
-    def mousePressEvent(self, event):
-        self.clicked.emit(self.objectName())
-
-
 class DAPPluginForm(PluginForm):
     """Primary plugin form"""
+
+    def __init__(self):
+        super(DAPPluginForm, self).__init__()
+        self.p = None
 
     def OnCreate(self, form):
         """Invoked when form is created."""
@@ -282,14 +276,6 @@ class DAPPluginForm(PluginForm):
             self.p.label_Breakpoint.setEnabled(True)
             self.p.lineEdit_Breakpoint.setEnabled(True)
 
-        # For Probing Column Widths
-        # widths = []
-        # for i in range(0, 5):
-        #     widths.append(self.p.tableWidget_Patches.columnWidth(i))
-        #sct727
-
-        # dap_msg("Column sizes: {}".format(str(widths)))
-
     def OnClose(self, form):
         global WINDOW_OPEN
         WINDOW_OPEN = False
@@ -355,7 +341,7 @@ class InjectionMethod:
 
 # Create menu handlers for IDA >= 700
 try:
-    # noinspection PyBroadException
+    # noinspection PyBroadException,PyMethodParameters
     class DapMenuContext(idaapi.action_handler_t):
         label = None
 
@@ -509,10 +495,10 @@ class GroupDatabase:
         """Returns group by name."""
         if name not in self.groups:
             dap_warn("Requested group [{}] is not in group database.".format(name))
-            return None
+            return PatchGroup("INVALID")
         return self.groups[name]
 
-    def add_group(self, name, enabled = True):
+    def add_group(self, name, enabled=True):
         """Adds group to database."""
         if name in self.groups:
             dap_warn("Cannot add patch group [{}] -- already exists in database!".format(name))
@@ -696,7 +682,7 @@ class DebugAutoPatchPlugin(idaapi.plugin_t):
         finally:
             self.patch_db_lock.release()
 
-    def save_database(self, print_notice = False):
+    def save_database(self, print_notice=False):
         """Saves the patch database (.dap file) to disk."""
         if len(self.patch_db_path) < 3:
             return
