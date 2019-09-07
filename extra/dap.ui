@@ -155,48 +155,34 @@
           <string>Patch Injection</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_3">
-          <item row="2" column="0">
-           <widget class="QLabel" name="label_Breakpoint">
-            <property name="font">
-             <font>
-              <weight>50</weight>
-              <bold>false</bold>
-             </font>
-            </property>
-            <property name="text">
-             <string>Breakpoint</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
-           <widget class="QCheckBox" name="checkBox_ResumeAfterInjection">
-            <property name="font">
-             <font>
-              <weight>50</weight>
-              <bold>false</bold>
-             </font>
-            </property>
-            <property name="text">
-             <string>Resume After Injection</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QComboBox" name="comboBox_InjectionMethod">
-            <property name="toolTip">
-             <string>[Startup] This injects the patch at application startup, as soon as the debugger starts.
-[Breakpoint] This injects the patch at the breakpoint specified. Be sure to check whether or not you'd like to automatically resume execution.</string>
-            </property>
-            <property name="currentText">
-             <string/>
-            </property>
-            <property name="maxVisibleItems">
-             <number>10</number>
-            </property>
-            <property name="frame">
-             <bool>true</bool>
-            </property>
-           </widget>
+          <item row="6" column="0">
+           <layout class="QHBoxLayout" name="horizontalLayout_3">
+            <item>
+             <widget class="QPushButton" name="pushButton_VisitBreakpoint">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="font">
+               <font>
+                <weight>50</weight>
+                <bold>false</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>  Visit Breakpoint  </string>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </item>
           <item row="0" column="0">
            <widget class="QLabel" name="label_InjectionMethod">
@@ -219,6 +205,49 @@
               <weight>50</weight>
               <bold>false</bold>
              </font>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QComboBox" name="comboBox_InjectionMethod">
+            <property name="toolTip">
+             <string>[Startup] This injects the patch at application startup, as soon as the debugger starts.
+[Breakpoint] This injects the patch at the breakpoint specified. Be sure to check whether or not you'd like to automatically resume execution.</string>
+            </property>
+            <property name="currentText">
+             <string/>
+            </property>
+            <property name="maxVisibleItems">
+             <number>10</number>
+            </property>
+            <property name="frame">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QCheckBox" name="checkBox_ResumeAfterInjection">
+            <property name="font">
+             <font>
+              <weight>50</weight>
+              <bold>false</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Resume After Injection</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_Breakpoint">
+            <property name="font">
+             <font>
+              <weight>50</weight>
+              <bold>false</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Breakpoint</string>
             </property>
            </widget>
           </item>
@@ -335,6 +364,9 @@
             </attribute>
             <attribute name="horizontalHeaderStretchLastSection">
              <bool>true</bool>
+            </attribute>
+            <attribute name="verticalHeaderVisible">
+             <bool>false</bool>
             </attribute>
             <column/>
             <column/>
