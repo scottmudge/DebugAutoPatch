@@ -44,7 +44,8 @@ from collections import OrderedDict
 # Qt Imports
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
 # noinspection PyUnresolvedReferences
-from PyQt5.QtWidgets import QMainWindow, QLabel, QGridLayout, QVBoxLayout, QWidget, QDialog, QPushButton, QHeaderView
+from PyQt5.QtWidgets import QMainWindow, QLabel, QGridLayout, QVBoxLayout, QWidget, QDialog, QPushButton, QHeaderView, \
+    QMessageBox
 # noinspection PyUnresolvedReferences
 from PyQt5.QtCore import QSize, QRect, pyqtSignal
 # noinspection PyUnresolvedReferences
@@ -237,12 +238,12 @@ class DAPPluginForm(PluginForm):
         self.p.tableWidget_Patches.setColumnWidth(5, 150)
         self.p.tableWidget_Patches.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)  # Disable column resize
 
-        # Note - use self.p.window() to get parent window
-        self.p.window().setMinimumSize(self.p.width(), self.p.height())
-
         self.RefreshViewWithPatchGroup()
         self._PatchGroupCombobox_Update()
-        self._UpdateAddPatchGroupState()
+        self._UpdatePatchGroupState()
+
+        # Note - use self.p.window() to get parent window
+        self.p.window().setMinimumSize(self.p.width(), self.p.height())
 
         global WINDOW_OPEN
         WINDOW_OPEN = True
@@ -254,13 +255,14 @@ class DAPPluginForm(PluginForm):
         group_name = self.p.comboBox_PatchGroup.currentText()
         if len(group_name) > 1:
             DAP_INST.patch_db.set_cur_group(group_name)
+        self._UpdatePatchGroupState()
 
     def _AddPatchGroupButton_Callback(self):
         """Callback for add patch group button."""
         # If not adding patch group, then switch to that mode and update
         if not self.adding_patch_group:
             self.adding_patch_group = True
-            self._UpdateAddPatchGroupState()
+            self._UpdatePatchGroupState()
         # Otherwise "OK" was pressed and we should add whatever is in the textbox
         else:
             group_name = self.p.lineEdit_AddGroup.text()
@@ -268,20 +270,31 @@ class DAPPluginForm(PluginForm):
             DAP_INST.patch_db.set_cur_group(group_name)
             self._PatchGroupCombobox_Update()
             self.adding_patch_group = False
-            self._UpdateAddPatchGroupState()
+            self._UpdatePatchGroupState()
+            DAP_INST.save_database()
 
     def _DeletePatchGroupButton_Callback(self):
         """Callback for delete patch group button."""
         # If adding patch group, button is "Cancel"
         if self.adding_patch_group:
             self.adding_patch_group = False
-        else:  # TODO -- Add "Are you sure?"
-            DAP_INST.patch_db.delete_cur_group()
-            self.adding_patch_group = False
-            self._PatchGroupCombobox_Update()
-        self._UpdateAddPatchGroupState()
+        else:
+            name = self.p.comboBox_PatchGroup.currentText()
+            if name == "Default":
+                return
+            response = QMessageBox.question(
+                self.p.window(), "Delete Patch Group?", "Are you sure you would like to delete patch group: {}"
+                    .format(name), QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if response == QMessageBox.Yes:
+                DAP_INST.patch_db.delete_cur_group()
+                self.adding_patch_group = False
+                self._PatchGroupCombobox_Update()
+                DAP_INST.save_database()
+            else:
+                return
+        self._UpdatePatchGroupState()
 
-    def _UpdateAddPatchGroupState(self):
+    def _UpdatePatchGroupState(self):
         """Updates the buttons and input for adding a patch group."""
         if self.adding_patch_group:
             self.p.lineEdit_AddGroup.show()
@@ -292,6 +305,8 @@ class DAPPluginForm(PluginForm):
             self.p.lineEdit_AddGroup.clear()
             self.p.pushButton_AddGroup.setText("Add")
             self.p.pushButton_DeleteGroup.setText("Delete")
+
+        self.p.checkBox_PatchGroupEnabled.setCheckState(2 if DAP_INST.patch_db.get_cur_group().enabled else 0)
 
     def _PatchGroupCombobox_Update(self):
         """Populates patch group combobox"""
@@ -336,16 +351,10 @@ class DAPPluginForm(PluginForm):
 
     def SetPatchInjectionMethod(self, index):
         if index == 0:
-            self.p.checkBox_ResumeAfterInjection.setEnabled(False)
             self.p.checkBox_ResumeAfterInjection.hide()
-            self.p.label_Breakpoint.setEnabled(False)
             self.p.label_Breakpoint.hide()
-            self.p.lineEdit_Breakpoint.setEnabled(False)
             self.p.lineEdit_Breakpoint.hide()
         else:
-            self.p.checkBox_ResumeAfterInjection.setEnabled(True)
-            self.p.label_Breakpoint.setEnabled(True)
-            self.p.lineEdit_Breakpoint.setEnabled(True)
             self.p.checkBox_ResumeAfterInjection.show()
             self.p.label_Breakpoint.show()
             self.p.lineEdit_Breakpoint.show()
