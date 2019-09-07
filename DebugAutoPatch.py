@@ -35,6 +35,7 @@ import idaapi
 import os
 import idc
 import json
+import sys
 import base64
 import cStringIO as StringIO
 import datetime
@@ -207,7 +208,9 @@ class DAPPluginForm(PluginForm):
         # Populate Injection Method ComboBox
         self.p.comboBox_InjectionMethod.addItem("Process Start")
         self.p.comboBox_InjectionMethod.addItem("Breakpoint")
-        self.p.comboBox_InjectionMethod.currentIndexChanged.connect(self.SetPatchInjectionMethod)
+        self.p.comboBox_InjectionMethod.activated.connect(self._InjectionMethodComboBox_Callback)
+        self.p.checkBox_ResumeAfterInjection.stateChanged.connect(self._ResumeAfterInjectionCheckbox_Callback)
+        self.p.lineEdit_Breakpoint.editingFinished.connect(self._BreakpointLineEdit_Callback)
 
         # Set logo and version at bottom
         self.p.label_BottomLogo.setPixmap(pixmap_logo)
@@ -216,16 +219,13 @@ class DAPPluginForm(PluginForm):
         # Patch group elements
         self.p.pushButton_AddGroup.clicked.connect(self._AddPatchGroupButton_Callback)
         self.p.pushButton_DeleteGroup.clicked.connect(self._DeletePatchGroupButton_Callback)
-        self.p.comboBox_PatchGroup.currentIndexChanged.connect(self._PatchGroupComboBox_Callback)
+        self.p.comboBox_PatchGroup.activated.connect(self._PatchGroupComboBox_Callback)
 
         # Resume after injection checkbox. 0 = not checked, 2 = checked
         self.p.checkBox_ResumeAfterInjection.setCheckState(0)
 
         # Enable/disable patch group checkbox
-        self.p.checkBox_PatchGroupEnabled.stateChanged.connect(self._PatchGroupEnabledCB_Callback)
-
-        # Set UI elemnents for patch injection method
-        self.SetPatchInjectionMethod(0)
+        self.p.checkBox_PatchGroupEnabled.stateChanged.connect(self._PatchGroupEnabledCheckbox_Callback)
 
         # Setup Table Widget
         labels = ("Enabled", "Address", "Patched Bytes", "Original Bytes", "Description", "Last Modified")
@@ -239,8 +239,7 @@ class DAPPluginForm(PluginForm):
         self.p.tableWidget_Patches.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)  # Disable column resize
 
         self.RefreshViewWithPatchGroup()
-        self._PatchGroupCombobox_Update()
-        self._UpdatePatchGroupState()
+        self._UpdateLeftElements()
 
         # Note - use self.p.window() to get parent window
         self.p.window().setMinimumSize(self.p.width(), self.p.height())
@@ -248,29 +247,121 @@ class DAPPluginForm(PluginForm):
         global WINDOW_OPEN
         WINDOW_OPEN = True
 
-    def _PatchGroupComboBox_Callback(self):
+    def _UpdateLeftElements(self):
+        """Updates all of the UI elements on the left"""
+        self._UpdatePatchInjection()
+        self._UpdatePatchGroup()
+
+    def _UpdatePatchInjection(self):
+        """Updates patch injection view"""
+        group = DAP_INST.patch_db.get_cur_group()
+        method = group.injection_method
+        resume_after = bool(group.resume_after_breakpoint)
+        breakpoint = str("0x%x" % group.breakpoint_addr)
+
+        self.p.comboBox_InjectionMethod.setCurrentIndex(int(method))
+
+        if method == InjectionMethod.ProcessStart:
+            self.p.checkBox_ResumeAfterInjection.hide()
+            self.p.label_Breakpoint.hide()
+            self.p.lineEdit_Breakpoint.hide()
+        else:
+            self.p.checkBox_ResumeAfterInjection.show()
+            self.p.label_Breakpoint.show()
+            self.p.lineEdit_Breakpoint.show()
+            self.p.checkBox_ResumeAfterInjection.setCheckState(2 if group.resume_after_breakpoint else 0)
+            self.p.lineEdit_Breakpoint.setText(breakpoint)
+
+    def _BreakpointLineEdit_Callback(self):
+        """Callback for breakpoint line edit."""
+
+        valid = True
+        text = self.p.lineEdit_Breakpoint.text()
+        text = text.replace('0x', '')
+        addr = 0
+        try:
+            addr = int(text, 16) # Base 16
+        except:
+            valid = False
+
+        if not valid:
+            QMessageBox.critical(self.p.window(), "Invalid Breakpoint Address",
+                                 "The breakpoint you provided contains invalid characters!", QMessageBox.Ok,
+                                 QMessageBox.Ok)
+            return
+
+        # Check if before or after core address
+        before_test = 0
+        after_test = 0
+        try:
+            before_test = idaapi.prev_addr(int(addr))  # if BADADDR, then address is before available code addresses
+            after_test = idaapi.next_addr(int(addr))  # if BADADDR, then address is after available code addresses
+        except TypeError:  # If this happens, address is too big
+            addr = sys.maxint
+            after_test = idaapi.BADADDR
+
+        if before_test == idaapi.BADADDR:
+            addr = idaapi.next_addr(addr)
+        elif after_test == idaapi.BADADDR:
+            addr = idaapi.prev_addr(addr)
+
+        # Check to make sure breakpoint is valid
+        if addr == idaapi.BADADDR:
+            QMessageBox.critical(self.p.window(), "Invalid Breakpoint Address",
+                                 "The breakpoint you provided [0x%x] is invalid!" % addr, QMessageBox.Ok,
+                                 QMessageBox.Ok)
+            return
+
+        self.p.lineEdit_Breakpoint.setText("0x%x" % addr)
+        DAP_INST.patch_db.get_cur_group().breakpoint_addr = addr
+        DAP_INST.save_database()
+
+    @staticmethod
+    def _ResumeAfterInjectionCheckbox_Callback(state):
+        """Callback for resume after injection checkbox."""
+        if state == 0:
+            DAP_INST.patch_db.get_cur_group().resume_after_breakpoint = False
+        elif state == 2:
+            DAP_INST.patch_db.get_cur_group().resume_after_breakpoint = True
+        else:
+            dap_warn("Unexpected checkbox state for PatchGroupEnabled")
+
+        DAP_INST.save_database()
+
+    def _InjectionMethodComboBox_Callback(self, index):
+        """Callback for injection method callback."""
+        if index == 0:
+            DAP_INST.patch_db.get_cur_group().injection_method = InjectionMethod.ProcessStart
+        else:
+            DAP_INST.patch_db.get_cur_group().injection_method = InjectionMethod.Breakpoint
+        self._UpdatePatchInjection()
+
+    def _PatchGroupComboBox_Callback(self, idx):
         """Callback for patch group combobox."""
         if self.adding_patch_group:
             return
         group_name = self.p.comboBox_PatchGroup.currentText()
         if len(group_name) > 1:
             DAP_INST.patch_db.set_cur_group(group_name)
-        self._UpdatePatchGroupState()
+
+        self._UpdateLeftElements()
 
     def _AddPatchGroupButton_Callback(self):
         """Callback for add patch group button."""
         # If not adding patch group, then switch to that mode and update
         if not self.adding_patch_group:
             self.adding_patch_group = True
-            self._UpdatePatchGroupState()
+            self._UpdateLeftElements()
         # Otherwise "OK" was pressed and we should add whatever is in the textbox
         else:
             group_name = self.p.lineEdit_AddGroup.text()
+            if len(group_name) < 1:
+                return
             DAP_INST.patch_db.add_group(group_name)
             DAP_INST.patch_db.set_cur_group(group_name)
-            self._PatchGroupCombobox_Update()
             self.adding_patch_group = False
-            self._UpdatePatchGroupState()
+            self._UpdateLeftElements()
+            self.p.comboBox_PatchGroup.setCurrentText(group_name)
             DAP_INST.save_database()
 
     def _DeletePatchGroupButton_Callback(self):
@@ -288,14 +379,33 @@ class DAPPluginForm(PluginForm):
             if response == QMessageBox.Yes:
                 DAP_INST.patch_db.delete_cur_group()
                 self.adding_patch_group = False
-                self._PatchGroupCombobox_Update()
                 DAP_INST.save_database()
             else:
                 return
-        self._UpdatePatchGroupState()
+        self._UpdateLeftElements()
 
-    def _UpdatePatchGroupState(self):
+    @staticmethod
+    def _PatchGroupEnabledCheckbox_Callback(state):
+        """Callback for state change of PatchGroupEnabled checkbox. - 0 == unchecked, 2 = checked"""
+        if state == 0:
+            DAP_INST.patch_db.get_cur_group().enabled = False
+        elif state == 2:
+            DAP_INST.patch_db.get_cur_group().enabled = True
+        else:
+            dap_warn("Unexpected checkbox state for PatchGroupEnabled")
+
+        DAP_INST.save_database()
+
+    def _UpdatePatchGroup(self):
         """Updates the buttons and input for adding a patch group."""
+        groups = DAP_INST.patch_db.get_all_group_names()
+        self.p.comboBox_PatchGroup.clear()
+
+        if len(groups) > 0:
+            for group in groups:
+                self.p.comboBox_PatchGroup.addItem(group)
+            self.p.comboBox_PatchGroup.setCurrentText(DAP_INST.patch_db.cur_group)
+
         if self.adding_patch_group:
             self.p.lineEdit_AddGroup.show()
             self.p.pushButton_AddGroup.setText("OK")
@@ -308,34 +418,6 @@ class DAPPluginForm(PluginForm):
 
         self.p.checkBox_PatchGroupEnabled.setCheckState(2 if DAP_INST.patch_db.get_cur_group().enabled else 0)
 
-    def _PatchGroupCombobox_Update(self):
-        """Populates patch group combobox"""
-        groups = DAP_INST.patch_db.get_all_group_names()
-
-        self.p.comboBox_PatchGroup.clear()
-
-        if len(groups) < 1:
-            return
-
-        for group in groups:
-            self.p.comboBox_PatchGroup.addItem(group)
-        self.p.comboBox_PatchGroup.setCurrentText(DAP_INST.patch_db.cur_group)
-
-    @staticmethod
-    def _PatchGroupEnabledCB_Callback(state):
-        """Callback for state change of PatchGroupEnabled checkbox. - 0 == unchecked, 2 = checked"""
-        if not DAP_INST:
-            return
-        
-        if state == 0:
-            DAP_INST.patch_db.get_cur_group().enabled = False
-        elif state == 2:
-            DAP_INST.patch_db.get_cur_group().enabled = True
-        else:
-            dap_warn("Unexpected checkbox state for PatchGroupEnabled")
-
-        DAP_INST.save_database()
-
     def RefreshViewWithPatchGroup(self):
         """Updates the table with data from the current patch group."""
 
@@ -345,19 +427,6 @@ class DAPPluginForm(PluginForm):
             return
 
         group = DAP_INST.patch_db.get_cur_group()  # type: PatchGroup
-
-        # Patch group
-        self.p.checkBox_PatchGroupEnabled.setCheckState(2 if group.enabled else 0)  # checkbox
-
-    def SetPatchInjectionMethod(self, index):
-        if index == 0:
-            self.p.checkBox_ResumeAfterInjection.hide()
-            self.p.label_Breakpoint.hide()
-            self.p.lineEdit_Breakpoint.hide()
-        else:
-            self.p.checkBox_ResumeAfterInjection.show()
-            self.p.label_Breakpoint.show()
-            self.p.lineEdit_Breakpoint.show()
 
     def OnClose(self, form):
         global WINDOW_OPEN
@@ -542,8 +611,12 @@ class PatchGroup:
         self.patches = []
         self.name = name
         self.enabled = enabled
+        if breakpoint_addr == idaapi.BADADDR:
+            breakpoint_addr = idaapi.next_addr(0)
         self.breakpoint_addr = breakpoint_addr
         self.injection_method = injection_method
+        self.resume_after_breakpoint = True
+        self.date_added = datetime.datetime.now()
 
 
 class GroupDatabase:
@@ -557,10 +630,13 @@ class GroupDatabase:
 
     def set_cur_group(self, name):
         """Sets the current patch group."""
+        if len(name) < 1:
+            return
         if name not in self.groups:
             dap_err("Cannot set current group to [{}] - does not exist in database!".format(name))
             return
         self.cur_group = name
+        dap_msg("Current patch group set to [{}].".format(name))
 
     def get_cur_group(self):
         # type: () -> PatchGroup
@@ -583,14 +659,20 @@ class GroupDatabase:
 
     def add_group(self, name, enabled=True):
         """Adds group to database."""
+        if len(name) < 1:
+            dap_warn("Cannot add patch group - name is blank.")
+            return
         if name in self.groups:
             dap_warn("Cannot add patch group [{}] -- already exists in database!".format(name))
+            return
         self.groups.update({name: PatchGroup(name, enabled)})
 
     def delete_group(self, name):
         """Deletes group from database."""
         if name == "Default":
             dap_err("Cannot delete the default group!")
+            return
+        if len(name) < 1:
             return
         if name in self.groups:
             # switch back to default if cur_group is same as group being deleted
@@ -607,8 +689,10 @@ class GroupDatabase:
             return
         self.delete_group(self.cur_group)
 
-    def get_all_group_names(self):
-        """Returns all current group names and current index."""
+    def get_all_group_names(self, sort=True):
+        """Returns all current group names and current index. Set sort to true to sort by date added."""
+        if sort:
+            return [k for k, v in sorted(self.groups.items(), key=lambda p: p[1].date_added)]
         return self.groups.keys()
 
 
